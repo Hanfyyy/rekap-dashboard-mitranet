@@ -1,0 +1,4 @@
+packages
+
+tesseract-ocr
+libtesseract-dev

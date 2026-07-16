@@ -1,0 +1,15 @@
+tesseract_cmd
+
+import platform
+
+# ==============================================================================
+# SETUP OCR (TESSERACT)
+# ==============================================================================
+try:
+    import pytesseract
+    # Kalau jalan di Windows (komputer lokalmu), pakai path drive C:
+    if platform.system() == "Windows":
+        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    # Kalau di server Linux (Streamlit Cloud), nggak perlu disetting manual
+except ImportError:
+    pass
