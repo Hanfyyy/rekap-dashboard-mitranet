@@ -352,7 +352,13 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
                 # ====== LOGIKA PDF ======
                 if file.name.endswith('.pdf'):
                     teks_full = ekstrak_teks_pdf(file.getvalue())
+                    
+                    # --- 1. JURUS DETEKSI GANDA (Cek Isi Teks, Kalau Gagal Cek Nama File) ---
                     bulan_laporan = deteksi_bulan(teks_full)
+                    if bulan_laporan == 'Bulan Tidak Diketahui':
+                        bulan_laporan = deteksi_bulan(file.name)
+                    # ------------------------------------------------------------------------
+
                     raw_data = parse_baris_transaksi(teks_full, bulan_laporan)
                     if not raw_data: continue
 
@@ -361,9 +367,22 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
 
                     with st.expander(f"📄 Pengaturan PDF: {file.name}", expanded=True):
                         
-                        # --- 🚀 TAMBAHIN BARIS INI BIAR TABEL PREVIEW MUNCUL ---
+                        # --- 2. FITUR MANUAL OVERRIDE (Biar bisa diganti kalau AI meleset) ---
+                        opsi_bulan = URUTAN_BULAN + ['Bulan Tidak Diketahui']
+                        saved_bln = get_widget(nama_menu, f"bln_pdf_{file_id}", bulan_laporan)
+                        
+                        # Pastikan saved_bln ada di opsi, kalau ngga balikin ke hasil deteksi
+                        if saved_bln not in opsi_bulan: 
+                            saved_bln = bulan_laporan if bulan_laporan in opsi_bulan else 'Bulan Tidak Diketahui'
+                            
+                        pilih_bulan = st.selectbox("📅 Konfirmasi / Revisi Bulan:", options=opsi_bulan, index=opsi_bulan.index(saved_bln), key=f"rek_bln_pdf_{file_id}")
+                        set_widget(nama_menu, f"bln_pdf_{file_id}", pilih_bulan)
+                        
+                        # Timpa kolom Bulan dengan pilihan dari Selectbox
+                        df_file["Bulan"] = pilih_bulan
+                        # ---------------------------------------------------------------------
+
                         st.dataframe(df_file, use_container_width=True)
-                        # -------------------------------------------------------
 
                         def_cols = ['Jumlah VA', 'Jumlah Transaksi', 'Nominal Masuk']
                         saved_cols = get_widget(nama_menu, f"cols_{file_id}", def_cols)
