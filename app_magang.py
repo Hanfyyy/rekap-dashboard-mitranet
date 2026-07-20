@@ -360,6 +360,11 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
                     df_file = df_file[~df_file['Provider_Asli'].astype(str).str.lower().str.contains('total', na=False)]
 
                     with st.expander(f"📄 Pengaturan PDF: {file.name}", expanded=True):
+                        
+                        # --- 🚀 TAMBAHIN BARIS INI BIAR TABEL PREVIEW MUNCUL ---
+                        st.dataframe(df_file, use_container_width=True)
+                        # -------------------------------------------------------
+
                         def_cols = ['Jumlah VA', 'Jumlah Transaksi', 'Nominal Masuk']
                         saved_cols = get_widget(nama_menu, f"cols_{file_id}", def_cols)
                         valid_cols = [c for c in saved_cols if c in def_cols]
@@ -712,8 +717,10 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
                     "Jumlah Transaksi": "Jumlah Transaksi",
                     "Nominal Transaksi": "Nilai_Bulanan"
                 }
-                saved_metrik = get_widget(nama_menu, "metrik_pivot", ["Jumlah VA (Create)"])
-                metrik_terpilih = st.multiselect("📊 1. Pilih Data Bulanan (Pivot):", options=list(opsi_metrik.keys()), default=saved_metrik, key="rek_metrik_pivot")
+                # --- REVISI: Default langsung "Select All" narik semua keys ---
+                semua_pilihan = list(opsi_metrik.keys())
+                saved_metrik = get_widget(nama_menu, "metrik_pivot", semua_pilihan)
+                metrik_terpilih = st.multiselect("📊 1. Pilih Data Bulanan (Pivot):", options=semua_pilihan, default=saved_metrik, key="rek_metrik_pivot")
                 set_widget(nama_menu, "metrik_pivot", metrik_terpilih)
 
             with col_m2:

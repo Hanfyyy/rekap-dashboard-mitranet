@@ -1,7 +1,0 @@
-streamlit
-pandas
-pdfplumber
-Pillow
-pytesseract
-XlsxWriter
-python-docx
