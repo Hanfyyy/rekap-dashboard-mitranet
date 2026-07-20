@@ -737,20 +737,18 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
             else:
                 # Filter berdasarkan Bank pilihan
                 df_raw_filtered = df_raw[df_raw['Bank Utama'].isin(bank_master_terpilih)]
-
-                # Hitung Total Kolom Samping Kiri (Agregasi)
-                kolom_agregasi = [opsi_metrik[m] for m in metrik_terpilih]
-                df_agregasi = df_raw_filtered.groupby(["Bank Utama", "Nama BPR Bersih"], as_index=False)[kolom_agregasi].sum()
                 
-                # Ubah nama header kolom total biar jelas
-                rename_dict = {opsi_metrik[m]: f"Total {m}" for m in metrik_terpilih}
-                df_final = df_agregasi.rename(columns=rename_dict)
+                # Bikin penampung buat nyimpen tabel dari masing-masing metrik
+                dict_df_metrik = {}
 
-                # ==================================
-                # MULTI-PIVOT MAGIC 🪄
-                # ==================================
                 for m_name in metrik_terpilih:
                     m_col = opsi_metrik[m_name]
+                    
+                    # 1. Total Samping (TOTAL)
+                    df_agregasi = df_raw_filtered.groupby(["Bank Utama", "Nama BPR Bersih"], as_index=False)[m_col].sum()
+                    df_agregasi = df_agregasi.rename(columns={m_col: "TOTAL"})
+                    
+                    # 2. Pivot Bulanan
                     df_pivot = df_raw_filtered.pivot_table(
                         index=["Bank Utama", "Nama BPR Bersih"],
                         columns="Bulan",
@@ -758,68 +756,87 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
                         aggfunc="sum",
                         fill_value=0
                     )
-
-                    # Pastikan 12 bulan selalu eksis
+                    
+                    # Pastikan 12 bulan selalu eksis (biar nggak bolong kalau datanya cuma ada Januari)
                     for bln in URUTAN_BULAN:
                         if bln not in df_pivot.columns:
                             df_pivot[bln] = 0
+                            
+                    df_pivot = df_pivot[URUTAN_BULAN].reset_index()
+                    
+                    # 3. Gabung & Simpan
+                    df_final_metrik = pd.merge(df_agregasi, df_pivot, on=["Bank Utama", "Nama BPR Bersih"], how="left")
+                    df_final_metrik = df_final_metrik.fillna(0)
+                    df_final_metrik.insert(0, "No", range(1, len(df_final_metrik) + 1))
+                    
+                    dict_df_metrik[m_name] = df_final_metrik
 
-                    # Beri Tanda Tag jika lebih dari 1 metrik (misal: "Januari (VA)", "Januari (Trx)")
-                    if len(metrik_terpilih) > 1:
-                        singkatan = "VA" if "VA" in m_name else ("Trx" if "Transaksi" in m_name and "Nominal" not in m_name else "Nominal")
-                        rename_bul = {bln: f"{bln} ({singkatan})" for bln in URUTAN_BULAN}
-                        df_pivot = df_pivot[URUTAN_BULAN].rename(columns=rename_bul)
-                    else:
-                        df_pivot = df_pivot[URUTAN_BULAN]
-
-                    df_pivot = df_pivot.reset_index()
-                    df_final = pd.merge(df_final, df_pivot, on=["Bank Utama", "Nama BPR Bersih"], how="left")
-
-                # Rapihkan DataFrame Akhir
-                df_final = df_final.fillna(0)
-                df_final.insert(0, "No", range(1, len(df_final) + 1))
-
-                # User bebas milih hide/show kolom finalnya
-                daftar_kolom = df_final.columns.tolist()
+                # User bebas milih hide/show kolom finalnya (Sekarang berlaku serentak untuk semua sheet)
+                contoh_df = dict_df_metrik[metrik_terpilih[0]]
+                daftar_kolom = contoh_df.columns.tolist()
                 saved_kol_sel = get_widget(nama_menu, "master_kolom", daftar_kolom)
                 valid_kol_sel = [c for c in saved_kol_sel if c in daftar_kolom]
-                kolom_master_terpilih = st.multiselect("👁️ 3. Sembunyikan/Tampilkan Kolom Data:", options=daftar_kolom, default=valid_kol_sel, key="rek_master_kolom")
+                kolom_master_terpilih = st.multiselect("👁️ 3. Sembunyikan/Tampilkan Kolom Data (Berlaku untuk semua Sheet):", options=daftar_kolom, default=valid_kol_sel, key="rek_master_kolom")
                 set_widget(nama_menu, "master_kolom", kolom_master_terpilih)
 
                 if not kolom_master_terpilih:
                     st.warning("⚠️ Silakan pilih minimal satu Kolom untuk ditampilkan.")
                 else:
-                    df_tampil = df_final[kolom_master_terpilih]
-                    df_tampil_display = df_tampil.copy()
+                    # ==================================
+                    # TAMPILAN UI (PAKAI STREAMLIT TABS)
+                    # ==================================
+                    tabs = st.tabs([f"📊 {m}" for m in metrik_terpilih])
                     
-                    # Kasih format titik (ribuan) biar enak dibaca bosnya
-                    kolom_angka = [c for c in df_tampil_display.columns if c not in ('No', 'Bank Utama', 'Nama BPR Bersih')]
-                    for kolom in kolom_angka:
-                        df_tampil_display[kolom] = df_tampil_display[kolom].apply(format_ribuan)
+                    for idx, m_name in enumerate(metrik_terpilih):
+                        with tabs[idx]:
+                            df_tampil = dict_df_metrik[m_name][kolom_master_terpilih].copy()
+                            
+                            # Kasih format titik (ribuan) biar enak dibaca bosnya di UI
+                            kolom_angka = [c for c in df_tampil.columns if c not in ('No', 'Bank Utama', 'Nama BPR Bersih')]
+                            for kolom in kolom_angka:
+                                df_tampil[kolom] = df_tampil[kolom].apply(format_ribuan)
 
-                    st.dataframe(df_tampil_display, use_container_width=True, hide_index=True)
+                            st.dataframe(df_tampil, use_container_width=True, hide_index=True)
+                            
                     st.markdown("---")
 
-                    # Tombol Download Magic
+                    # ==================================
+                    # EXPORT EXCEL MULTI-SHEET MAGIC 🪄
+                    # ==================================
                     try:
                         buffer = io.BytesIO()
                         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                            df_tampil.to_excel(writer, sheet_name='Rekap Master', index=False)
-                            workbook, worksheet = writer.book, writer.sheets['Rekap Master']
+                            workbook = writer.book
                             format_angka_excel = workbook.add_format({'num_format': '#,##0'})
 
-                            for idx, kolom in enumerate(df_tampil.columns):
-                                if kolom in ('Bank Utama', 'Nama BPR Bersih'):
-                                    worksheet.set_column(idx, idx, 25)
-                                elif kolom == 'No':
-                                    worksheet.set_column(idx, idx, 5)
-                                else:
-                                    worksheet.set_column(idx, idx, 15, format_angka_excel)
+                            # Peta nama sheet biar rapi (nggak kepanjangan)
+                            sheet_name_map = {
+                                "Jumlah VA (Create)": "Jumlah VA",
+                                "Jumlah Transaksi": "Jumlah Trx",
+                                "Nominal Transaksi": "Nominal"
+                            }
+
+                            for m_name in metrik_terpilih:
+                                df_excel = dict_df_metrik[m_name][kolom_master_terpilih]
+                                nama_sheet = sheet_name_map.get(m_name, m_name[:30])
+                                
+                                # Buat sheet baru di Excel
+                                df_excel.to_excel(writer, sheet_name=nama_sheet, index=False)
+                                worksheet = writer.sheets[nama_sheet]
+                                
+                                # Auto-Width tiap kolom
+                                for idx, kolom in enumerate(df_excel.columns):
+                                    if kolom in ('Bank Utama', 'Nama BPR Bersih'):
+                                        worksheet.set_column(idx, idx, 25)
+                                    elif kolom == 'No':
+                                        worksheet.set_column(idx, idx, 5)
+                                    else:
+                                        worksheet.set_column(idx, idx, 15, format_angka_excel)
 
                         st.download_button(
-                            label="📥 Download Excel Hasil Gabungan",
+                            label="📥 Download Excel Multi-Sheet",
                             data=buffer.getvalue(),
-                            file_name="Rekap_Data_Master.xlsx",
+                            file_name="Rekap_Data_Master_MultiSheet.xlsx",
                             mime="application/vnd.ms-excel",
                             type="primary",
                         )
