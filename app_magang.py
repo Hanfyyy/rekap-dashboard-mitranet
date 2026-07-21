@@ -23,6 +23,9 @@ except ImportError:
 # ==============================================================================
 st.set_page_config(page_title="PT Mitranet Dashboard", page_icon="🪢", layout="wide")
 
+if "file_uploader_key" not in st.session_state:
+    st.session_state["file_uploader_key"] = 0
+
 # ==============================================================================
 # KONSTANTA & POLA REGEX
 # ==============================================================================
@@ -294,7 +297,7 @@ def parse_baris_word_dinamis(teks_full: str, bulan_laporan: str) -> list:
     if temp_data and 'Provider_Asli' in temp_data and temp_data not in data:
         if '_tunggu' in temp_data: del temp_data['_tunggu']
         data.append(temp_data)
-    return data
+    return 
 
 # ==============================================================================
 # 🎛️ SIDEBAR NAVIGASI
@@ -307,27 +310,35 @@ if 'state_data' not in st.session_state:
 
 with st.sidebar:
     st.title("Menu Navigasi")
-    menu_terpilih = st.radio("Pilih Modul Aplikasi:", ["Laporan Rekap (Semua Format)", "Laporan MBanking (Matrix 1-31)"])
+    menu_terpilih = st.radio("Pilih Modul Aplikasi:", ["Laporan VA (Semua Format)", "Laporan MBanking (Matrix 1-31)"])
     st.markdown("---")
     st.caption("© 2026 PT Mitranet Software")
 
 # ==============================================================================
-# JALUR 1 : LAPORAN REKAP
+# JALUR 1 : Laporan VA (Semua Format)
 # ==============================================================================
-if menu_terpilih == "Laporan Rekap (Semua Format)":
+if menu_terpilih == "Laporan VA (Semua Format)":
     nama_menu = 'rekap'
-    st.title("🔄 Modul Laporan Rekap (Pivot Bulanan)")
+    st.title("🔄 Modul Laporan VA (Semua Format)")
     st.markdown("Upload laporan PDF/CSV/Excel/Word. Dilengkapi fitur Sheet selector & OCR lokal!")
     st.markdown("---")
 
-    col_up, col_btn = st.columns([4, 1])
-    with col_up:
-        uploaded_files = st.file_uploader("Upload Laporan", type=['pdf', 'csv', 'xlsx', 'doc', 'docx'], accept_multiple_files=True, key="rek_uploader")
-    with col_btn:
-        st.write(""); st.write("") 
-        if st.button("🗑️ Bersihkan File", use_container_width=True):
-            st.session_state.state_data[nama_menu] = {'audit_log': [], 'processed_files': set(), 'file_cache': [], 'widget_states': {}, 'ocr_results': {}}
-            st.rerun()
+    col_up1, col_up2 = st.columns([4, 1])
+
+with col_up1:
+    # Perhatikan ada tambahan key yang nyambung ke session state
+    uploaded_files = st.file_uploader(
+        "Upload Laporan", 
+        accept_multiple_files=True, 
+        key=f"uploader_{st.session_state['file_uploader_key']}"
+    )
+
+with col_up2:
+    st.write("") # Buat ngerapihin posisi tombol biar sejajar ke bawah
+    st.write("")
+    if st.button("🗑️ Bersihkan File", use_container_width=True):
+        st.session_state["file_uploader_key"] += 1
+        st.rerun() # Ini bakal nge-refresh app dan ngosongin uploadernya!
 
     if uploaded_files:
         st.session_state.state_data[nama_menu]['file_cache'] = [{'name': f.name, 'size': f.size, 'data': f.getvalue()} for f in uploaded_files]
@@ -367,23 +378,17 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
 
                     with st.expander(f"📄 Pengaturan PDF: {file.name}", expanded=True):
                         
-                        # --- 2. FITUR MANUAL OVERRIDE (Biar bisa diganti kalau AI meleset) ---
+                        # 1. Pilih Bulan
                         opsi_bulan = URUTAN_BULAN + ['Bulan Tidak Diketahui']
                         saved_bln = get_widget(nama_menu, f"bln_pdf_{file_id}", bulan_laporan)
-                        
-                        # Pastikan saved_bln ada di opsi, kalau ngga balikin ke hasil deteksi
                         if saved_bln not in opsi_bulan: 
                             saved_bln = bulan_laporan if bulan_laporan in opsi_bulan else 'Bulan Tidak Diketahui'
                             
                         pilih_bulan = st.selectbox("📅 Konfirmasi / Revisi Bulan:", options=opsi_bulan, index=opsi_bulan.index(saved_bln), key=f"rek_bln_pdf_{file_id}")
                         set_widget(nama_menu, f"bln_pdf_{file_id}", pilih_bulan)
-                        
-                        # Timpa kolom Bulan dengan pilihan dari Selectbox
                         df_file["Bulan"] = pilih_bulan
-                        # ---------------------------------------------------------------------
 
-                        st.dataframe(df_file, use_container_width=True)
-
+                        # 2. PINDAH KE ATAS: Multiselect buat centang metrik
                         def_cols = ['Jumlah VA', 'Jumlah Transaksi', 'Nominal Masuk']
                         saved_cols = get_widget(nama_menu, f"cols_{file_id}", def_cols)
                         valid_cols = [c for c in saved_cols if c in def_cols]
@@ -391,6 +396,17 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
                         kolom_pilihan = st.multiselect("Centang angka yang ingin di-Pivot:", options=def_cols, default=valid_cols, key=f"rek_cols_{file_id}")
                         set_widget(nama_menu, f"cols_{file_id}", kolom_pilihan)
 
+                        # 3. LOGIKA BARU: Tentukan kolom apa aja yang mau ditampilin di Preview
+                        kolom_tampil = ['Provider_Asli']
+                        if 'Jumlah VA' in kolom_pilihan: kolom_tampil.append('Jumlah VA')
+                        if 'Jumlah Transaksi' in kolom_pilihan: kolom_tampil.append('Jumlah Transaksi')
+                        if 'Nominal Masuk' in kolom_pilihan: kolom_tampil.append('Nilai_Bulanan')
+                        kolom_tampil.append('Bulan')
+
+                        # 4. Gambar Tabel Preview (Cuma nampilin kolom yang ada di list kolom_tampil)
+                        st.dataframe(df_file[kolom_tampil], use_container_width=True)
+
+                        # 5. Persiapan data untuk dilempar ke Tabel Master Gabungan
                         df_file_filtered = df_file.copy()
                         if 'Jumlah VA' not in kolom_pilihan: df_file_filtered['Jumlah VA'] = 0
                         if 'Jumlah Transaksi' not in kolom_pilihan: df_file_filtered['Jumlah Transaksi'] = 0
@@ -783,8 +799,10 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
                             
                     df_pivot = df_pivot[URUTAN_BULAN].reset_index()
                     
-                    # 3. Gabung & Simpan
-                    df_final_metrik = pd.merge(df_agregasi, df_pivot, on=["Bank Utama", "Nama BPR Bersih"], how="left")
+                    # 3. Gabung & Simpan (TUKER POSISI MERGE BIAR TOTAL DI KANAN)
+                    # df_pivot (Bulan) ditaruh kiri, df_agregasi (Total) ditaruh kanan
+                    df_final_metrik = pd.merge(df_pivot, df_agregasi, on=["Bank Utama", "Nama BPR Bersih"], how="left")
+                    
                     df_final_metrik = df_final_metrik.fillna(0)
                     df_final_metrik.insert(0, "No", range(1, len(df_final_metrik) + 1))
                     
@@ -795,7 +813,7 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
                 daftar_kolom = contoh_df.columns.tolist()
                 saved_kol_sel = get_widget(nama_menu, "master_kolom", daftar_kolom)
                 valid_kol_sel = [c for c in saved_kol_sel if c in daftar_kolom]
-                kolom_master_terpilih = st.multiselect("👁️ 3. Sembunyikan/Tampilkan Kolom Data (Berlaku untuk semua Sheet):", options=daftar_kolom, default=valid_kol_sel, key="rek_master_kolom")
+                kolom_master_terpilih = st.multiselect("👁️ 3. Tampilkan Kolom Data (Berlaku untuk semus sheet)", options=daftar_kolom, default=valid_kol_sel, key="rek_master_kolom")
                 set_widget(nama_menu, "master_kolom", kolom_master_terpilih)
 
                 if not kolom_master_terpilih:
@@ -868,7 +886,7 @@ if menu_terpilih == "Laporan Rekap (Semua Format)":
 # ==============================================================================
 # JALUR 2 : LAPORAN MBANKING
 # ==============================================================================
-elif menu_terpilih == "Laporan MBanking (Matrix 1-31)":
+if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
     nama_menu = 'mbanking'
     st.title("🔄 Modul Laporan MBanking (Matrix 1-31)")
     st.markdown("Upload laporan dari portal bank (PDF/CSV/Excel). Ketik identitas manual, jadikan Pivot 1-31!")
