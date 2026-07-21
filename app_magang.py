@@ -323,23 +323,26 @@ if menu_terpilih == "Laporan VA (Semua Format)":
     st.markdown("Upload laporan PDF/CSV/Excel/Word. Dilengkapi fitur Sheet selector & OCR lokal!")
     st.markdown("---")
 
+    # --- 1. BIKIN KOLOMNYA DULU ---
     col_up1, col_up2 = st.columns([4, 1])
 
-with col_up1:
-    # Perhatikan ada tambahan key yang nyambung ke session state
-    uploaded_files = st.file_uploader(
-        "Upload Laporan", 
-        accept_multiple_files=True, 
-        key=f"uploader_{st.session_state['file_uploader_key']}"
-    )
+        # --- 2. ISI KOLOM KIRI (UPLOADER) ---
+    with col_up1:
+        uploaded_files = st.file_uploader(
+            "Upload Laporan Mobile Banking", 
+            accept_multiple_files=True, 
+            key=f"uploader_mbanking_{st.session_state['file_uploader_key']}"
+        )
 
-with col_up2:
-    st.write("") # Buat ngerapihin posisi tombol biar sejajar ke bawah
-    st.write("")
-    if st.button("🗑️ Bersihkan File", use_container_width=True):
-        st.session_state["file_uploader_key"] += 1
-        st.rerun() # Ini bakal nge-refresh app dan ngosongin uploadernya!
+        # --- 3. ISI KOLOM KANAN (TOMBOL CLEAR) ---
+    with col_up2:
+        st.write("") 
+        st.write("")
+        if st.button("🗑️ Bersihkan File", key="btn_clear_mbanking", use_container_width=True):
+            st.session_state["file_uploader_key"] += 1
+            st.rerun()
 
+        # --- 4. LANJUTAN KODINGAN ASLIMU ---
     if uploaded_files:
         st.session_state.state_data[nama_menu]['file_cache'] = [{'name': f.name, 'size': f.size, 'data': f.getvalue()} for f in uploaded_files]
 
@@ -773,8 +776,59 @@ with col_up2:
                 # Filter berdasarkan Bank pilihan
                 df_raw_filtered = df_raw[df_raw['Bank Utama'].isin(bank_master_terpilih)]
                 
-                # Bikin penampung buat nyimpen tabel dari masing-masing metrik
-                dict_df_metrik = {}
+                # ==========================================
+                # FITUR BARU: FILTER BPR DATA EDITOR HACK 🪄
+                # ==========================================
+                list_bpr_unik = sorted(df_raw_filtered['Nama BPR Bersih'].unique().tolist())
+                
+                # ==========================================
+                # FITUR BARU: FILTER BPR DATA EDITOR HACK 🪄
+                # ==========================================
+                list_bpr_unik = sorted(df_raw_filtered['Nama BPR Bersih'].unique().tolist())
+                
+                with st.expander("🔍 Filter & Cari Nama BPR", expanded=True):
+                    
+                    # LOGIKA BARU: Cek kalau datanya kosong
+                    if not list_bpr_unik:
+                        st.info("👈 Silakan pilih minimal 1 Bank Utama terlebih dahulu agar daftar BPR muncul.")
+                        bpr_terpilih = [] # Kosongin list terpilih
+                    else:
+                        st.markdown("💡 **Tips Pencarian:** Arahkan mouse ke **dalam area tabel** di bawah, lalu klik ikon **🔍 (Search)** yang otomatis muncul di **pojok kanan atas tabel**.")
+                        
+                        pilih_semua = st.checkbox("☑️ Pilih Semua BPR", value=False)
+                        
+                        df_bpr_checkbox = pd.DataFrame({
+                            "Pilih": [pilih_semua] * len(list_bpr_unik),
+                            "Nama BPR Bersih": list_bpr_unik
+                        })
+                        
+                        tabel_bpr_diedit = st.data_editor(
+                            df_bpr_checkbox,
+                            hide_index=True,
+                            use_container_width=True,
+                            height=250, 
+                            column_config={
+                                "Pilih": st.column_config.CheckboxColumn("Pilih", width="small"),
+                                "Nama BPR Bersih": st.column_config.TextColumn("Nama BPR Bersih", disabled=True)
+                            }
+                        )
+                        
+                        bpr_terpilih = tabel_bpr_diedit[tabel_bpr_diedit["Pilih"] == True]["Nama BPR Bersih"].tolist()
+
+                # Terapkan filter BPR ke raw data
+                df_raw_filtered = df_raw_filtered[df_raw_filtered['Nama BPR Bersih'].isin(bpr_terpilih)]
+                
+                # Sisa kodinganmu lanjut di bawah sini (if df_raw_filtered.empty: dst...)
+                
+                # Cek kalau user iseng uncheck semua BPR
+                if df_raw_filtered.empty:
+                    st.warning("⚠️ Tidak ada BPR yang dipilih. Silakan centang minimal satu BPR di menu filter.")
+                else:
+                    # KODINGAN ASLI LANJUTANMU MASUK SINI, JANGAN LUPA DI-INDENT (DI-TAB MASUK KE DALAM 1x)
+                    # Bikin penampung buat nyimpen tabel dari masing-masing metrik
+                    dict_df_metrik = {}
+                    
+                    # for m_name in metrik_terpilih: ... dan seterusnya sampai bawah (export excel)
 
                 for m_name in metrik_terpilih:
                     m_col = opsi_metrik[m_name]
@@ -892,14 +946,25 @@ if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
     st.markdown("Upload laporan dari portal bank (PDF/CSV/Excel). Ketik identitas manual, jadikan Pivot 1-31!")
     st.markdown("---")
 
-    col_up, col_btn = st.columns([4, 1])
-    with col_up:
-        uploaded_files = st.file_uploader("Upload Laporan (Bisa banyak file)", type=['pdf', 'csv', 'xlsx'], accept_multiple_files=True, key="mbk_uploader")
-    with col_btn:
-        st.write(""); st.write("") 
-        if st.button("🗑️ Bersihkan File Modul Ini", use_container_width=True):
-            st.session_state.state_data[nama_menu]['file_cache'] = []
-            st.session_state.state_data[nama_menu]['widget_states'] = {}
+# --- 1. WAJIB DIBIKIN DULU KOLOMNYA ---
+    col_up1, col_up2 = st.columns([4, 1])
+
+    # --- 2. UPLOADER DI KOLOM KIRI ---
+    with col_up1:
+        uploaded_files = st.file_uploader(
+            "Upload Laporan", 
+            accept_multiple_files=True, 
+            # PERHATIKAN: Key-nya aku bedain (pakai 'rekap') biar nggak tabrakan sama yg MBanking
+            key=f"uploader_rekap_{st.session_state['file_uploader_key']}" 
+        )
+
+    # --- 3. TOMBOL CLEAR DI KOLOM KANAN ---
+    with col_up2:
+        st.write("") 
+        st.write("")
+        # PERHATIKAN: Key tombolnya juga dibedain
+        if st.button("🗑️ Bersihkan File", key="btn_clear_rekap", use_container_width=True):
+            st.session_state["file_uploader_key"] += 1
             st.rerun()
 
     if uploaded_files:
