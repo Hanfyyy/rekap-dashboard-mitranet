@@ -317,6 +317,7 @@ with st.sidebar:
         [
             "Laporan VA (Semua Format)",
             "Laporan MBanking (Matrix 1-31)",
+            "Laporan Qris",
             "Analisis Persentase"
         ]
     )
@@ -1431,3 +1432,217 @@ if menu_terpilih == "Analisis Persentase":
             
             df_final = pd.concat([df_grouped, baris_total], ignore_index=True)
             st.dataframe(df_final, use_container_width=True, hide_index=True)
+
+# ==============================================================================
+# JALUR 3 : LAPORAN QRIS (ULTIMATE)
+# ==============================================================================
+if menu_terpilih == "Laporan Qris":
+    st.title("📱 Modul Laporan QRIS")
+    st.markdown("Upload Laporan Invoice QRIS. Sistem otomatis merakit Pivot Jumlah, Nominal, dan Fee MSO!")
+    st.markdown("---")
+
+    uploaded_qris = st.file_uploader("Upload Laporan Invoice QRIS (Excel)", type=['xlsx', 'xls'], accept_multiple_files=True, key="upload_qris")
+
+    if uploaded_qris:
+        semua_data_qris = []
+        
+        with st.spinner("Sedang mencuci dan merakit data QRIS..."):
+            for file in uploaded_qris:
+                try:
+                    df = pd.read_excel(file)
+                    
+                    if 'Nama Lembaga' in df.columns and 'Tanggal Transaksi' in df.columns and 'Nominal Transaksi' in df.columns and 'Nominal Fee MSO' in df.columns:
+                        
+                        df_bersih = df[['Nama Lembaga', 'Tanggal Transaksi', 'Nominal Transaksi', 'Nominal Fee MSO']].copy()
+                        df_bersih['Tanggal Transaksi'] = pd.to_datetime(df_bersih['Tanggal Transaksi'], errors='coerce')
+                        df_bersih['Bulan'] = df_bersih['Tanggal Transaksi'].dt.month.map(MAP_BULAN_ANGKA)
+                        
+                        semua_data_qris.append(df_bersih)
+                    else:
+                        st.warning(f"⚠️ File {file.name} diabaikan karena format kolomnya beda (Tidak ada Nama Lembaga/Tanggal/Nominal/Nominal Fee MSO).")
+                
+                except Exception as e:
+                    st.error(f"❌ Gagal membaca {file.name}: {e}")
+
+        # Jika ada data yang sukses dicuci
+        if semua_data_qris:
+            df_master_qris = pd.concat(semua_data_qris, ignore_index=True)
+            df_master_qris = df_master_qris.dropna(subset=['Bulan'])
+            
+            # ==========================================
+            # 1. PRATINJAU DATA MENTAH (PREVIEW)
+            # ==========================================
+            st.markdown("### 👁️ Pratinjau Data Invoice")
+            with st.expander("Buka untuk melihat data gabungan QRIS", expanded=False):
+                st.markdown("""
+                    <style>
+                    .outline-preview-qris {
+                        border: 2px solid #00b894; 
+                        border-radius: 10px;
+                        padding: 10px;
+                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                        margin-bottom: 10px;
+                    }
+                    </style>
+                    <div class="outline-preview-qris">
+                """, unsafe_allow_html=True)
+                
+                st.dataframe(df_master_qris.head(100), use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            # ==========================================
+            # 2. FILTER BPR & FILTER BULAN (CHECKLIST)
+            # ==========================================
+            st.markdown("### 🔍 Filter Data (BPR & Bulan)")
+            
+            col_f1, col_f2 = st.columns(2)
+
+            with col_f1:
+                st.markdown("**Pilih BPR:**")
+                list_bpr_unik = sorted(df_master_qris['Nama Lembaga'].dropna().unique().tolist())
+                
+                pilih_semua_bpr = st.checkbox("☑️ Pilih Semua BPR", value=True, key="qris_semua_bpr")
+                df_bpr_checkbox = pd.DataFrame({
+                    "Pilih": [pilih_semua_bpr] * len(list_bpr_unik),
+                    "Nama BPR": list_bpr_unik
+                })
+                
+                st.markdown("""<style>.outline-f1 { border: 2px solid #0984e3; border-radius: 10px; padding: 10px; }</style><div class="outline-f1">""", unsafe_allow_html=True)
+                tabel_bpr_diedit = st.data_editor(
+                    df_bpr_checkbox, hide_index=True, use_container_width=True, height=180,
+                    column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")}
+                )
+                st.markdown("</div>", unsafe_allow_html=True)
+                bpr_terpilih = tabel_bpr_diedit[tabel_bpr_diedit["Pilih"] == True]["Nama BPR"].tolist()
+
+            with col_f2:
+                st.markdown("**Pilih Bulan:**")
+                pilih_semua_bln = st.checkbox("☑️ Pilih Semua Bulan", value=True, key="qris_semua_bln")
+                df_bln_checkbox = pd.DataFrame({
+                    "Pilih": [pilih_semua_bln] * len(URUTAN_BULAN),
+                    "Bulan": URUTAN_BULAN
+                })
+                
+                st.markdown("""<style>.outline-f2 { border: 2px solid #e84393; border-radius: 10px; padding: 10px; }</style><div class="outline-f2">""", unsafe_allow_html=True)
+                tabel_bln_diedit = st.data_editor(
+                    df_bln_checkbox, hide_index=True, use_container_width=True, height=180,
+                    column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")}
+                )
+                st.markdown("</div>", unsafe_allow_html=True)
+                bulan_terpilih = tabel_bln_diedit[tabel_bln_diedit["Pilih"] == True]["Bulan"].tolist()
+
+            # Terapkan filter ke dataframe utama
+            df_master_qris = df_master_qris[
+                (df_master_qris['Nama Lembaga'].isin(bpr_terpilih)) & 
+                (df_master_qris['Bulan'].isin(bulan_terpilih))
+            ]
+
+            if df_master_qris.empty:
+                st.warning("⚠️ Data kosong. Pastikan minimal ada 1 BPR dan 1 Bulan yang dicentang!")
+            else:
+                st.markdown("### 📊 Hasil Pivot Laporan QRIS")
+
+                # ==========================================
+                # 3. MESIN PIVOT DATA
+                # ==========================================
+                pivot_jml = df_master_qris.pivot_table(index='Nama Lembaga', columns='Bulan', values='Nominal Transaksi', aggfunc='count', fill_value=0).reset_index()
+                pivot_nom = df_master_qris.pivot_table(index='Nama Lembaga', columns='Bulan', values='Nominal Transaksi', aggfunc='sum', fill_value=0).reset_index()
+                pivot_fee = df_master_qris.pivot_table(index='Nama Lembaga', columns='Bulan', values='Nominal Fee MSO', aggfunc='sum', fill_value=0).reset_index()
+
+                for bln in URUTAN_BULAN:
+                    if bln not in pivot_jml.columns: pivot_jml[bln] = 0
+                    if bln not in pivot_nom.columns: pivot_nom[bln] = 0
+                    if bln not in pivot_fee.columns: pivot_fee[bln] = 0
+
+                kolom_rapi = ['Nama Lembaga'] + URUTAN_BULAN
+                pivot_jml = pivot_jml[kolom_rapi]
+                pivot_nom = pivot_nom[kolom_rapi]
+                pivot_fee = pivot_fee[kolom_rapi]
+
+                pivot_jml['Jumlah'] = pivot_jml[URUTAN_BULAN].sum(axis=1)
+                pivot_nom['Jumlah'] = pivot_nom[URUTAN_BULAN].sum(axis=1)
+                pivot_fee['Jumlah'] = pivot_fee[URUTAN_BULAN].sum(axis=1)
+
+                pivot_jml = pivot_jml.rename(columns={'Nama Lembaga': 'Nama BPR'})
+                pivot_nom = pivot_nom.rename(columns={'Nama Lembaga': 'Nama BPR'})
+                pivot_fee = pivot_fee.rename(columns={'Nama Lembaga': 'Nama BPR'})
+
+                pivot_jml.insert(0, 'No.', range(1, len(pivot_jml) + 1))
+                pivot_nom.insert(0, 'No.', range(1, len(pivot_nom) + 1))
+                pivot_fee.insert(0, 'No.', range(1, len(pivot_fee) + 1))
+
+                # ==========================================
+                # 4. TAMPILAN WEB (TAB)
+                # ==========================================
+                tab1, tab2, tab3 = st.tabs(["📉 Jumlah Transaksi", "💰 Nominal Transaksi", "💸 Fee MSO"])
+                
+                with tab1:
+                    tampil_jml = pivot_jml.copy()
+                    for col in URUTAN_BULAN + ['Jumlah']: tampil_jml[col] = tampil_jml[col].apply(format_ribuan)
+                    st.dataframe(tampil_jml, use_container_width=True, hide_index=True)
+                    
+                with tab2:
+                    tampil_nom = pivot_nom.copy()
+                    for col in URUTAN_BULAN + ['Jumlah']: tampil_nom[col] = tampil_nom[col].apply(format_ribuan)
+                    st.dataframe(tampil_nom, use_container_width=True, hide_index=True)
+
+                with tab3:
+                    tampil_fee = pivot_fee.copy()
+                    for col in URUTAN_BULAN + ['Jumlah']: tampil_fee[col] = tampil_fee[col].apply(format_ribuan)
+                    st.dataframe(tampil_fee, use_container_width=True, hide_index=True)
+                    
+                # ==========================================
+                # 5. EXPORT EXCEL KHUSUS QRIS (3 SHEET)
+                # ==========================================
+                st.markdown("### 📥 Download Laporan")
+                try:
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                        workbook = writer.book
+                        
+                        fmt_title = workbook.add_format({'bold': True, 'font_size': 11})
+                        fmt_header = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+                        fmt_angka = workbook.add_format({'border': 1, 'num_format': '#,##0', 'align': 'center', 'valign': 'vcenter'})
+                        fmt_teks = workbook.add_format({'border': 1, 'valign': 'vcenter'})
+                        fmt_total = workbook.add_format({'bold': True, 'border': 1, 'num_format': '#,##0', 'align': 'center', 'valign': 'vcenter'})
+
+                        sheets_data = [
+                            ('Jumlah Transaksi', pivot_jml, 'JUMLAH TRANSAKSI QRIS BIMASAKTI (WINPAY)'), 
+                            ('Nominal Transaksi', pivot_nom, 'NOMINAL TRANSAKSI QRIS BIMASAKTI (WINPAY)'),
+                            ('Fee MSO', pivot_fee, 'NOMINAL FEE MSO QRIS BIMASAKTI (WINPAY)')
+                        ]
+
+                        for sheet_name, df_export, title in sheets_data:
+                            df_export.to_excel(writer, sheet_name=sheet_name, startrow=2, index=False, header=False)
+                            worksheet = writer.sheets[sheet_name]
+                            
+                            worksheet.write(0, 0, title, fmt_title)
+                            
+                            for col_num, value in enumerate(df_export.columns.values):
+                                worksheet.write(2, col_num, value, fmt_header)
+
+                            for row_num in range(len(df_export)):
+                                worksheet.write(row_num + 3, 0, df_export.iloc[row_num, 0], fmt_angka) 
+                                worksheet.write(row_num + 3, 1, df_export.iloc[row_num, 1], fmt_teks)  
+                                for col_num in range(2, len(df_export.columns)):
+                                    worksheet.write(row_num + 3, col_num, df_export.iloc[row_num, col_num], fmt_angka)
+
+                            last_row = len(df_export) + 3
+                            worksheet.merge_range(last_row, 0, last_row, 1, "JUMLAH", fmt_header)
+                            for col_num in range(2, len(df_export.columns)):
+                                total_val = df_export.iloc[:, col_num].sum()
+                                worksheet.write(last_row, col_num, total_val, fmt_total)
+
+                            worksheet.set_column(0, 0, 5)   
+                            worksheet.set_column(1, 1, 35)  
+                            worksheet.set_column(2, 14, 12) 
+                            
+                    st.download_button(
+                        label="📥 Download Master Excel QRIS",
+                        data=buffer.getvalue(),
+                        file_name="Laporan_Master_QRIS.xlsx",
+                        mime="application/vnd.ms-excel",
+                        type="primary",
+                    )
+                except ModuleNotFoundError:
+                    st.error("🚨 Library 'xlsxwriter' belum terinstall!")
