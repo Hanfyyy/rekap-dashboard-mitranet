@@ -10,6 +10,7 @@ import streamlit as st
 from PIL import Image
 import plotly.express as px
 import uuid
+import openpyxl
 
 # ==============================================================================
 # SETUP OCR (TESSERACT) - Disimpan buat jaga-jaga
@@ -1596,9 +1597,27 @@ if menu_terpilih == "Laporan Qris":
                 st.markdown("</div>", unsafe_allow_html=True)
 
             # ==========================================
-            # FILTER BPR, BULAN, & TAHUN
+            # FILTER BPR, BULAN, & TAHUN (VERSI BERSIH)
             # ==========================================
             st.markdown("### 🔍 Filter Data")
+            
+            # ==========================================
+            # SUNTIKAN CSS SUPER MAGIC V2 (ANTI GAGAL)
+            # ==========================================
+            st.markdown("""
+                <style>
+                /* Border untuk 3 Tabel Filter di Atas (Balik pakai stDataFrame karena data_editor pake tag ini) */
+                [data-testid="column"]:nth-child(1) [data-testid="stDataFrame"] { border: 2px solid #0984e3 !important; border-radius: 8px !important; overflow: hidden !important; }
+                [data-testid="column"]:nth-child(2) [data-testid="stDataFrame"] { border: 2px solid #e84393 !important; border-radius: 8px !important; overflow: hidden !important; }
+                [data-testid="column"]:nth-child(3) [data-testid="stDataFrame"] { border: 2px solid #fdcb6e !important; border-radius: 8px !important; overflow: hidden !important; }
+
+                /* Border untuk Tabel Hasil Pivot di Bawah (Deteksi langsung dari Index Tab-nya) */
+                [data-testid="stTabs"] [id*="tabpanel-0"] [data-testid="stDataFrame"] { border: 2px solid #FF4B4B !important; border-radius: 8px !important; overflow: hidden !important; }
+                [data-testid="stTabs"] [id*="tabpanel-1"] [data-testid="stDataFrame"] { border: 2px solid #fdcb6e !important; border-radius: 8px !important; overflow: hidden !important; }
+                [data-testid="stTabs"] [id*="tabpanel-2"] [data-testid="stDataFrame"] { border: 2px solid #00b894 !important; border-radius: 8px !important; overflow: hidden !important; }
+                </style>
+            """, unsafe_allow_html=True)
+
             col_f1, col_f2, col_f3 = st.columns(3)
 
             with col_f1:
@@ -1607,9 +1626,8 @@ if menu_terpilih == "Laporan Qris":
                 pilih_semua_bpr = st.checkbox("☑️ Pilih Semua BPR", value=True, key="qris_semua_bpr")
                 df_bpr_checkbox = pd.DataFrame({"Pilih": [pilih_semua_bpr] * len(list_bpr_unik), "Nama BPR": list_bpr_unik})
                 
-                st.markdown("""<style>.outline-f1 { border: 2px solid #0984e3; border-radius: 10px; padding: 10px; }</style><div class="outline-f1">""", unsafe_allow_html=True)
+                # Bersih dari div sosis, langsung panggil tabelnya
                 tabel_bpr_diedit = st.data_editor(df_bpr_checkbox, hide_index=True, use_container_width=True, height=180, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
-                st.markdown("</div>", unsafe_allow_html=True)
                 bpr_terpilih = tabel_bpr_diedit[tabel_bpr_diedit["Pilih"] == True]["Nama BPR"].tolist()
 
             with col_f2:
@@ -1617,9 +1635,8 @@ if menu_terpilih == "Laporan Qris":
                 pilih_semua_bln = st.checkbox("☑️ Pilih Semua Bulan", value=True, key="qris_semua_bln")
                 df_bln_checkbox = pd.DataFrame({"Pilih": [pilih_semua_bln] * len(URUTAN_BULAN), "Bulan": URUTAN_BULAN})
                 
-                st.markdown("""<style>.outline-f2 { border: 2px solid #e84393; border-radius: 10px; padding: 10px; }</style><div class="outline-f2">""", unsafe_allow_html=True)
+                # Bersih dari div sosis
                 tabel_bln_diedit = st.data_editor(df_bln_checkbox, hide_index=True, use_container_width=True, height=180, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
-                st.markdown("</div>", unsafe_allow_html=True)
                 bulan_terpilih = tabel_bln_diedit[tabel_bln_diedit["Pilih"] == True]["Bulan"].tolist()
                 
             with col_f3:
@@ -1628,9 +1645,8 @@ if menu_terpilih == "Laporan Qris":
                 pilih_semua_thn = st.checkbox("☑️ Pilih Semua Tahun", value=True, key="qris_semua_thn")
                 df_thn_checkbox = pd.DataFrame({"Pilih": [pilih_semua_thn] * len(list_tahun_unik), "Tahun": list_tahun_unik})
                 
-                st.markdown("""<style>.outline-f3 { border: 2px solid #fdcb6e; border-radius: 10px; padding: 10px; }</style><div class="outline-f3">""", unsafe_allow_html=True)
+                # Bersih dari div sosis
                 tabel_thn_diedit = st.data_editor(df_thn_checkbox, hide_index=True, use_container_width=True, height=180, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
-                st.markdown("</div>", unsafe_allow_html=True)
                 tahun_terpilih = tabel_thn_diedit[tabel_thn_diedit["Pilih"] == True]["Tahun"].tolist()
 
             df_master_qris = df_master_qris[
@@ -1675,16 +1691,19 @@ if menu_terpilih == "Laporan Qris":
                 with tab1:
                     tampil_jml = pivot_jml.copy()
                     for col in URUTAN_BULAN + ['Jumlah']: tampil_jml[col] = tampil_jml[col].apply(format_ribuan)
+                    # Bersih dari div sosis
                     st.dataframe(tampil_jml, use_container_width=True, hide_index=True)
                     
                 with tab2:
                     tampil_nom = pivot_nom.copy()
                     for col in URUTAN_BULAN + ['Jumlah']: tampil_nom[col] = tampil_nom[col].apply(format_ribuan)
+                    # Bersih dari div sosis
                     st.dataframe(tampil_nom, use_container_width=True, hide_index=True)
 
                 with tab3:
                     tampil_fee = pivot_fee.copy()
                     for col in URUTAN_BULAN + ['Jumlah']: tampil_fee[col] = tampil_fee[col].apply(format_ribuan)
+                    # Bersih dari div sosis
                     st.dataframe(tampil_fee, use_container_width=True, hide_index=True)
                     
                 st.markdown("### 📥 Download Laporan")
