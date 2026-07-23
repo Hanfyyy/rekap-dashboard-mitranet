@@ -323,36 +323,31 @@ with st.sidebar:
     )
 
 # ==============================================================================
-# JALUR 1 : Laporan VA (Semua Format)
+# JALUR 1 : Laporan VA (Semua Format + FILTER TAHUN)
 # ==============================================================================
 if menu_terpilih == "Laporan VA (Semua Format)":
     nama_menu = 'rekap'
     st.title("🔄 Modul Laporan VA (Semua Format)")
-    st.markdown("Upload laporan PDF/CSV/Excel/Word. Dilengkapi fitur Sheet selector & OCR lokal!")
+    st.markdown("Upload laporan PDF/CSV/Excel/Word. Dilengkapi fitur Sheet selector, OCR lokal, & Filter Tahun!")
     st.markdown("---")
 
-    # --- 1. BIKIN KOLOMNYA DULU ---
     col_up1, col_up2 = st.columns([4, 1])
 
-    # --- 2. ISI KOLOM KIRI (UPLOADER) ---
     with col_up1:
         uploaded_files = st.file_uploader(
-            "Upload Laporan Mobile Banking", 
+            "Upload Laporan Virtual Account", 
             accept_multiple_files=True, 
-            key=f"uploader_mbanking_{st.session_state['file_uploader_key']}"
+            key=f"uploader_va_{st.session_state['file_uploader_key']}"
         )
 
-    # --- 3. ISI KOLOM KANAN (TOMBOL CLEAR) ---
     with col_up2:
         st.write("") 
         st.write("")
-        if st.button("🗑️ Bersihkan File", key="btn_clear_mbanking", use_container_width=True):
+        if st.button("🗑️ Bersihkan File", key="btn_clear_va", use_container_width=True):
             st.session_state["file_uploader_key"] += 1
-            # BARIS SAKTI: Hapus ingatan memori cache secara paksa
             st.session_state.state_data[nama_menu]['file_cache'] = []
             st.rerun()
 
-    # --- 4. LANJUTAN KODINGAN ASLIMU ---
     if uploaded_files:
         st.session_state.state_data[nama_menu]['file_cache'] = [{'name': f.name, 'size': f.size, 'data': f.getvalue()} for f in uploaded_files]
 
@@ -362,10 +357,8 @@ if menu_terpilih == "Laporan VA (Semua Format)":
         semua_data_terpilih = []
         st.markdown("### 🎛️ Ekstraksi Data Vertikal & Matriks")
         
-        # --- 1. TAMBAHKAN PALET WARNA DI SINI ---
         warna_palette = ['#FF4B4B', '#00b894', '#0984e3', '#fdcb6e', '#6c5ce7', '#e84393']
         idx_warna = 0
-        # ----------------------------------------
 
         for f_dict in active_files:
             file = CachedFile(f_dict['name'], f_dict['size'], f_dict['data'])
@@ -377,22 +370,24 @@ if menu_terpilih == "Laporan VA (Semua Format)":
 
             if not file_aktif: continue
             
-            # --- 2. INJEKSI HTML WARNA DI SINI (SEBELUM TRY) ---
             warna_pilihan = warna_palette[idx_warna % len(warna_palette)]
             idx_warna += 1
             st.markdown(f'<div style="height: 10px; background-color: {warna_pilihan}; border-radius: 5px 5px 0 0; margin-bottom: -0.5rem; z-index: 99; position: relative;"></div>', unsafe_allow_html=True)
-            # ---------------------------------------------------
             
             try:
                 # ====== LOGIKA PDF ======
                 if file.name.endswith('.pdf'):
                     teks_full = ekstrak_teks_pdf(file.getvalue())
                     
-                    # --- 1. JURUS DETEKSI GANDA (Cek Isi Teks, Kalau Gagal Cek Nama File) ---
                     bulan_laporan = deteksi_bulan(teks_full)
                     if bulan_laporan == 'Bulan Tidak Diketahui':
                         bulan_laporan = deteksi_bulan(file.name)
-                    # ------------------------------------------------------------------------
+                        
+                    # Ekstrak Tahun dari Nama File (Jika ada)
+                    tahun_terdeteksi = "Unknown"
+                    import re
+                    match_thn = re.search(r'20\d{2}', file.name)
+                    if match_thn: tahun_terdeteksi = match_thn.group()
 
                     raw_data = parse_baris_transaksi(teks_full, bulan_laporan)
                     if not raw_data: continue
@@ -402,17 +397,21 @@ if menu_terpilih == "Laporan VA (Semua Format)":
 
                     with st.expander(f"📄 Pengaturan PDF: {file.name}", expanded=True):
                         
-                        # 1. Pilih Bulan
                         opsi_bulan = URUTAN_BULAN + ['Bulan Tidak Diketahui']
                         saved_bln = get_widget(nama_menu, f"bln_pdf_{file_id}", bulan_laporan)
                         if saved_bln not in opsi_bulan: 
                             saved_bln = bulan_laporan if bulan_laporan in opsi_bulan else 'Bulan Tidak Diketahui'
                             
-                        pilih_bulan = st.selectbox("📅 Konfirmasi / Revisi Bulan:", options=opsi_bulan, index=opsi_bulan.index(saved_bln), key=f"rek_bln_pdf_{file_id}")
-                        set_widget(nama_menu, f"bln_pdf_{file_id}", pilih_bulan)
-                        df_file["Bulan"] = pilih_bulan
+                        col_p1, col_p2 = st.columns(2)
+                        with col_p1:
+                            pilih_bulan = st.selectbox("📅 Konfirmasi Bulan:", options=opsi_bulan, index=opsi_bulan.index(saved_bln), key=f"rek_bln_pdf_{file_id}")
+                            set_widget(nama_menu, f"bln_pdf_{file_id}", pilih_bulan)
+                            df_file["Bulan"] = pilih_bulan
+                            
+                        with col_p2:
+                            pilih_tahun = st.text_input("🗓️ Konfirmasi Tahun:", value=tahun_terdeteksi, key=f"rek_thn_pdf_{file_id}")
+                            df_file["Tahun"] = pilih_tahun
 
-                        # 2. PINDAH KE ATAS: Multiselect buat centang metrik
                         def_cols = ['Jumlah VA', 'Jumlah Transaksi', 'Nominal Masuk']
                         saved_cols = get_widget(nama_menu, f"cols_{file_id}", def_cols)
                         valid_cols = [c for c in saved_cols if c in def_cols]
@@ -420,17 +419,14 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                         kolom_pilihan = st.multiselect("Centang angka yang ingin di-Pivot:", options=def_cols, default=valid_cols, key=f"rek_cols_{file_id}")
                         set_widget(nama_menu, f"cols_{file_id}", kolom_pilihan)
 
-                        # 3. LOGIKA BARU: Tentukan kolom apa aja yang mau ditampilin di Preview
                         kolom_tampil = ['Provider_Asli']
                         if 'Jumlah VA' in kolom_pilihan: kolom_tampil.append('Jumlah VA')
                         if 'Jumlah Transaksi' in kolom_pilihan: kolom_tampil.append('Jumlah Transaksi')
                         if 'Nominal Masuk' in kolom_pilihan: kolom_tampil.append('Nilai_Bulanan')
-                        kolom_tampil.append('Bulan')
+                        kolom_tampil.extend(['Bulan', 'Tahun'])
 
-                        # 4. Gambar Tabel Preview (Cuma nampilin kolom yang ada di list kolom_tampil)
                         st.dataframe(df_file[kolom_tampil], use_container_width=True)
 
-                        # 5. Persiapan data untuk dilempar ke Tabel Master Gabungan
                         df_file_filtered = df_file.copy()
                         if 'Jumlah VA' not in kolom_pilihan: df_file_filtered['Jumlah VA'] = 0
                         if 'Jumlah Transaksi' not in kolom_pilihan: df_file_filtered['Jumlah Transaksi'] = 0
@@ -462,6 +458,7 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     df_ocr = df_ocr[~df_ocr['Provider_Asli'].astype(str).str.lower().str.contains('total', na=False)]
                                     df_ocr['Bank Utama'] = df_ocr.apply(kategori_bank, axis=1)
                                     df_ocr['Nama BPR Bersih'] = df_ocr['Provider_Asli'].apply(bersihkan_nama_bpr)
+                                    df_ocr['Tahun'] = "2026" # Default Tahun untuk OCR, bisa diedit user nanti jika perlu
                                     st.session_state.state_data[nama_menu]['ocr_results'][file_id] = df_ocr
                                     st.success(f"✅ AI Berhasil mengekstrak {len(df_ocr)} baris data!")
                                     st.rerun()
@@ -476,6 +473,10 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                 elif file.name.endswith(('.csv', '.xlsx', '.xls')):
                     data_sheet_list = []
                     
+                    import re
+                    match_thn_ex = re.search(r'20\d{2}', file.name)
+                    thn_default_ex = match_thn_ex.group() if match_thn_ex else "Unknown"
+
                     if file.name.endswith('.csv'):
                         df_raw = baca_csv_pintar(file)
                         if not df_raw.empty: data_sheet_list.append((file.name, df_raw))
@@ -494,11 +495,9 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                     for nama_sumber, df_raw in data_sheet_list:
                         sumber_id = f"{file_id}_{nama_sumber}"
                         
-                        # --- 🚀 JURUS SUPER PAGAR BANK & AUTO-HEADER ---
                         bulan_list = [b.lower() for b in MAP_BULAN.values()]
                         is_matrix = False
                         
-                        # Cek apakah ini file Matriks (bulan menyamping)
                         if any(b in [str(c).lower().strip() for c in df_raw.columns] for b in bulan_list):
                             is_matrix = True
                         else:
@@ -508,26 +507,22 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     break
                                     
                         if is_matrix:
-                            # 1. Turunkan header asli jadi baris data
                             temp_df = df_raw.copy()
                             temp_df.loc[-1] = temp_df.columns
                             temp_df.index = temp_df.index + 1
                             temp_df = temp_df.sort_index()
                             temp_df.columns = [f"Col_{i}" for i in range(temp_df.shape[1])]
                             
-                            # 2. Bikin Pagar Bank Utama Otomatis dari Kolom 0 (Kolom A di Excel)
                             current_bank = pd.NA
                             bank_list_temp = []
                             for val in temp_df["Col_0"]:
                                 val_str = str(val).strip().upper()
-                                # Tangkap kata kunci "VA BNI", "VA BRI", dll di Kolom A
                                 if val_str.startswith("VA ") and len(val_str) <= 15:
                                     current_bank = val_str
                                 bank_list_temp.append(current_bank)
                                 
                             temp_df["Bank Utama Pagar"] = bank_list_temp
                             
-                            # 3. Auto-Header (Naikin baris Januari, Februari jadi Judul Kolom)
                             for i in range(min(7, len(temp_df))):
                                 baris_isi = [str(x).lower().strip() for x in temp_df.iloc[i].values]
                                 if any(b in baris_isi for b in bulan_list):
@@ -535,13 +530,12 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     for idx_col, val in enumerate(temp_df.iloc[i].values):
                                         val_str = str(val).strip()
                                         if temp_df.columns[idx_col] == "Bank Utama Pagar":
-                                            new_header.append("Bank Utama") # Header kolom bank kita
+                                            new_header.append("Bank Utama") 
                                         elif pd.isna(val) or val_str.lower() in ['none', 'nan', '']:
-                                            new_header.append(f"KolomKosong_{idx_col}") # Anti duplikat Unnamed
+                                            new_header.append(f"KolomKosong_{idx_col}") 
                                         else:
                                             new_header.append(val_str)
                                             
-                                    # Pastikan 1000% gak ada nama kembar
                                     seen = {}
                                     final_header = []
                                     for c in new_header:
@@ -555,17 +549,14 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     temp_df.columns = final_header
                                     df_raw = temp_df.iloc[i+1:].reset_index(drop=True)
                                     break
-                        # ----------------------------------------------------------
 
                         if is_matrix:
                             df_raw.columns = [str(c).strip() for c in df_raw.columns]
                             
                             with st.expander(f"📝 Bedah Matriks: {nama_sumber}", expanded=True):
-                                # --- 1. MUNCULIN PREVIEW TABEL LAGI ---
                                 st.dataframe(df_raw, use_container_width=True)
-                                # --------------------------------------
                                 
-                                col1, col2 = st.columns(2)
+                                col1, col2, col3 = st.columns(3) # Tambah 1 kolom untuk input Tahun
                                 
                                 opsi_prov = [c for c in df_raw.columns if any(x in c.lower() for x in ['provider', 'bpr', 'nama', 'mitra'])]
                                 def_prov = opsi_prov[0] if opsi_prov else df_raw.columns[1]
@@ -579,7 +570,10 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     col_prov = st.selectbox("📌 Kolom Provider/BPR:", options=df_raw.columns, index=list(df_raw.columns).index(def_prov), key=f"p_prov_{sumber_id}")
                                 with col2:
                                     jenis_data = st.selectbox("Tabel ini berisi:", ["Jumlah VA", "Jumlah Transaksi", "Nominal Masuk"], index=default_jenis, key=f"p_jenis_{sumber_id}")
-                                
+                                with col3:
+                                    # FITUR BARU TAHUN
+                                    thn_matrix = st.text_input("🗓️ Tahun Matriks:", value=thn_default_ex, key=f"p_thn_{sumber_id}")
+
                                 cols_bulan_terdeteksi = [col for col in df_raw.columns if str(col).strip().lower() in [b.lower() for b in URUTAN_BULAN]]
                                 
                                 if not cols_bulan_terdeteksi:
@@ -597,26 +591,19 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     df_melt["Bulan"] = pd.Categorical(df_melt["Bulan"], categories=URUTAN_BULAN, ordered=True)
                                     df_melt = df_melt.sort_values(["Bulan", col_prov])
                                     
-                                    # --- 2. JURUS SAPU JAGAT ULTIMATE (HAPUS BARIS SAMPAH) ---
-                                    # Buang kata "Total"
                                     df_melt = df_melt[~df_melt[col_prov].astype(str).str.lower().str.contains('total', na=False)]
-                                    
-                                    # EKSEKUSI IDE BOSKU: Hapus baris kalau nama BPR-nya kosong, 'none', 'nan', atau sisa header
                                     kata_sampah = ['no', 'nama bpr', 'nan', 'none', 'provider', '', 'null']
                                     df_melt = df_melt[~df_melt[col_prov].astype(str).str.lower().str.strip().isin(kata_sampah)]
-                                    
-                                    # Tambahan: Hapus baris yang cell BPR-nya benar-benar kosong (NaN/NaT di Pandas)
                                     df_melt = df_melt.dropna(subset=[col_prov])
-                                    
-                                    # Buang kalau isinya cuma nama grup bank (misal: "VA BNI") di kolom BPR
                                     df_melt = df_melt[~df_melt[col_prov].astype(str).str.upper().str.startswith('VA ')]
-                                    # --------------------------------------------------------
                                     
                                     df_melt['Nilai'] = df_melt['Nilai'].apply(aman_ke_angka)
                                     
                                     df_ext = pd.DataFrame()
                                     df_ext['Provider_Asli'] = df_melt[col_prov]
                                     df_ext['Bulan'] = df_melt['Bulan']
+                                    df_ext['Tahun'] = thn_matrix # Masukkan Tahun!
+                                    
                                     if col_bank_utama:
                                         df_ext['Bank Utama'] = df_melt[col_bank_utama]
                                         
@@ -628,7 +615,7 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     df_ext['Nama BPR Bersih'] = df_ext['Provider_Asli'].apply(bersihkan_nama_bpr)
                                     
                                     semua_data_terpilih.append(df_ext)
-                                    st.success(f"✅ {len(cols_bulan_terdeteksi)} Bulan (Otomatis masuk Tabel Master)")
+                                    st.success(f"✅ {len(cols_bulan_terdeteksi)} Bulan di Tahun {thn_matrix} (Otomatis masuk Tabel Master)")
 
                         else:
                             with st.expander(f"📄 Pengaturan Vertikal: {nama_sumber}", expanded=True):
@@ -641,13 +628,28 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                                     df_to_process[col_bank_utama] = df_to_process[col_bank_utama].replace(r'^\s*$', pd.NA, regex=True).ffill()
 
                                 df_to_process, bulan_otomatis = isi_bulan_otomatis(df_to_process)
-                                if bulan_otomatis:
-                                    st.success("✅ Bulan berhasil dideteksi otomatis dari kolom tanggal.")
-                                else:
-                                    saved_bln = get_widget(nama_menu, f"bln_{sumber_id}", "Januari")
-                                    input_bulan = st.selectbox("📅 Bulan laporan", URUTAN_BULAN, index=URUTAN_BULAN.index(saved_bln) if saved_bln in URUTAN_BULAN else 0, key=f"rek_bln_{sumber_id}")
-                                    set_widget(nama_menu, f"bln_{sumber_id}", input_bulan)
-                                    df_to_process["Bulan"] = input_bulan
+                                
+                                # EKSTRAK TAHUN VERTIKAL
+                                thn_auto = "Unknown"
+                                if 'Tanggal' in df_to_process.columns:
+                                    try:
+                                        df_to_process['Tanggal_Parsed'] = pd.to_datetime(df_to_process['Tanggal'], errors='coerce')
+                                        thn_auto = str(df_to_process['Tanggal_Parsed'].dt.year.mode()[0]).replace('.0', '')
+                                    except: pass
+
+                                col_t1, col_t2 = st.columns(2)
+                                with col_t1:
+                                    if bulan_otomatis:
+                                        st.success("✅ Bulan terdeteksi otomatis.")
+                                    else:
+                                        saved_bln = get_widget(nama_menu, f"bln_{sumber_id}", "Januari")
+                                        input_bulan = st.selectbox("📅 Bulan laporan", URUTAN_BULAN, index=URUTAN_BULAN.index(saved_bln) if saved_bln in URUTAN_BULAN else 0, key=f"rek_bln_{sumber_id}")
+                                        set_widget(nama_menu, f"bln_{sumber_id}", input_bulan)
+                                        df_to_process["Bulan"] = input_bulan
+                                
+                                with col_t2:
+                                    input_thn_vert = st.text_input("🗓️ Tahun Laporan", value=thn_auto, key=f"rek_thn_vert_{sumber_id}")
+                                    df_to_process["Tahun"] = input_thn_vert
 
                                 st.markdown("**⚙️ Pilih Data yang Tersedia di Laporan:**")
                                 col_chk1, col_chk2, col_chk3, col_chk4 = st.columns(4)
@@ -715,6 +717,7 @@ if menu_terpilih == "Laporan VA (Semua Format)":
 
                                 df_file_filtered = pd.DataFrame(index=df_to_process.index)
                                 df_file_filtered["Bulan"] = df_to_process["Bulan"]
+                                df_file_filtered["Tahun"] = df_to_process["Tahun"] # Bawa Tahun!
                                 
                                 if col_bank_utama:
                                     df_file_filtered['Bank Utama'] = df_to_process[col_bank_utama]
@@ -757,13 +760,16 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                 continue
 
         # ==============================================================================
-        # 🚀 TABEL MASTER GABUNGAN (DYNAMIC PIVOT ENGINE)
+        # 🚀 TABEL MASTER GABUNGAN (DYNAMIC PIVOT ENGINE + FILTER TAHUN)
         # ==============================================================================
         if semua_data_terpilih and any(not df.empty for df in semua_data_terpilih):
             df_raw = pd.concat(semua_data_terpilih, ignore_index=True)
 
             df_raw["Bulan"] = df_raw["Bulan"].astype(str).str.strip().str.capitalize()
             df_raw["Bulan"] = pd.Categorical(df_raw["Bulan"], categories=URUTAN_BULAN, ordered=True)
+            
+            # Rapihkan string tahun
+            df_raw["Tahun"] = df_raw["Tahun"].fillna("Unknown").astype(str).str.replace(".0", "", regex=False)
 
             st.markdown("---")
             st.markdown("### 🎛️ Tampilan Tabel Master (Hasil Gabungan)")
@@ -794,41 +800,45 @@ if menu_terpilih == "Laporan VA (Semua Format)":
             else:
                 df_raw_filtered = df_raw[df_raw['Bank Utama'].isin(bank_master_terpilih)]
                 
-                list_bpr_unik = sorted(df_raw_filtered['Nama BPR Bersih'].unique().tolist())
-                
-                with st.expander("🔍 Filter & Cari Nama BPR", expanded=True):
+                with st.expander("🔍 Filter BPR & Tahun", expanded=True):
+                    col_f1, col_f2 = st.columns(2)
                     
-                    if not list_bpr_unik:
-                        st.info("👈 Silakan pilih minimal 1 Bank Utama terlebih dahulu agar daftar BPR muncul.")
-                        bpr_terpilih = [] 
-                    else:
-                        st.markdown("💡 **Tips Pencarian:** Arahkan mouse ke **dalam area tabel** di bawah, lalu klik ikon **🔍 (Search)** yang otomatis muncul di **pojok kanan atas tabel**.")
-                        
-                        # SUDAH TRUE OTOMATIS:
-                        pilih_semua = st.checkbox("☑️ Pilih Semua BPR", value=True)
-                        
-                        df_bpr_checkbox = pd.DataFrame({
-                            "Pilih": [pilih_semua] * len(list_bpr_unik),
-                            "Nama BPR Bersih": list_bpr_unik
-                        })
-                        
-                        tabel_bpr_diedit = st.data_editor(
-                            df_bpr_checkbox,
-                            hide_index=True,
-                            use_container_width=True,
-                            height=250, 
-                            column_config={
-                                "Pilih": st.column_config.CheckboxColumn("Pilih", width="small"),
-                                "Nama BPR Bersih": st.column_config.TextColumn("Nama BPR Bersih", disabled=True)
-                            }
-                        )
-                        
-                        bpr_terpilih = tabel_bpr_diedit[tabel_bpr_diedit["Pilih"] == True]["Nama BPR Bersih"].tolist()
+                    with col_f1:
+                        list_bpr_unik = sorted(df_raw_filtered['Nama BPR Bersih'].unique().tolist())
+                        if not list_bpr_unik:
+                            st.info("👈 Pilih Bank Utama agar daftar BPR muncul.")
+                            bpr_terpilih = [] 
+                        else:
+                            pilih_semua = st.checkbox("☑️ Pilih Semua BPR", value=True)
+                            df_bpr_checkbox = pd.DataFrame({"Pilih": [pilih_semua] * len(list_bpr_unik), "Nama BPR Bersih": list_bpr_unik})
+                            
+                            st.markdown("""<style>.outline-bpr { border: 2px solid #0984e3; border-radius: 10px; padding: 10px; }</style><div class="outline-bpr">""", unsafe_allow_html=True)
+                            tabel_bpr_diedit = st.data_editor(df_bpr_checkbox, hide_index=True, use_container_width=True, height=250, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
+                            st.markdown("</div>", unsafe_allow_html=True)
+                            bpr_terpilih = tabel_bpr_diedit[tabel_bpr_diedit["Pilih"] == True]["Nama BPR Bersih"].tolist()
 
-                df_raw_filtered = df_raw_filtered[df_raw_filtered['Nama BPR Bersih'].isin(bpr_terpilih)]
+                    with col_f2:
+                        list_thn_unik = sorted(df_raw_filtered['Tahun'].unique().tolist(), reverse=True)
+                        if not list_thn_unik:
+                            st.info("Data tahun kosong.")
+                            tahun_terpilih = []
+                        else:
+                            pilih_semua_thn = st.checkbox("☑️ Pilih Semua Tahun", value=True)
+                            df_thn_checkbox = pd.DataFrame({"Pilih": [pilih_semua_thn] * len(list_thn_unik), "Tahun": list_thn_unik})
+                            
+                            st.markdown("""<style>.outline-thn { border: 2px solid #fdcb6e; border-radius: 10px; padding: 10px; }</style><div class="outline-thn">""", unsafe_allow_html=True)
+                            tabel_thn_diedit = st.data_editor(df_thn_checkbox, hide_index=True, use_container_width=True, height=250, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
+                            st.markdown("</div>", unsafe_allow_html=True)
+                            tahun_terpilih = tabel_thn_diedit[tabel_thn_diedit["Pilih"] == True]["Tahun"].tolist()
+
+                # TERAPKAN KEDUA FILTER KE DATAFRAME UTAMA
+                df_raw_filtered = df_raw_filtered[
+                    (df_raw_filtered['Nama BPR Bersih'].isin(bpr_terpilih)) &
+                    (df_raw_filtered['Tahun'].isin(tahun_terpilih))
+                ]
                 
                 if df_raw_filtered.empty:
-                    st.warning("⚠️ Tidak ada BPR yang dipilih. Silakan centang minimal satu BPR di menu filter.")
+                    st.warning("⚠️ Data Kosong. Silakan centang minimal satu BPR dan satu Tahun di menu filter.")
                 else:
                     dict_df_metrik = {}
                     
@@ -863,108 +873,142 @@ if menu_terpilih == "Laporan VA (Semua Format)":
                         dict_df_metrik[m_name] = df_final_metrik
 
                 # User bebas milih hide/show kolom finalnya + URUTANNYA
-                contoh_df = dict_df_metrik[metrik_terpilih[0]]
-                daftar_kolom_asli = contoh_df.columns.tolist()
-                
-                # JURUS AUTO-SORT (CUSTOM REQUEST BOS): 
-                # Urutan: No -> Bulan -> Nama BPR -> Bank Utama -> TOTAL
-                kolom_no = ['No'] if 'No' in daftar_kolom_asli else []
-                kolom_identitas = ['Nama BPR Bersih', 'Bank Utama'] # Sengaja BPR dulu baru Bank
-                
-                # Cari kolom bulan (Semua kolom selain No, BPR, Bank, dan Total)
-                kolom_bulan = [c for c in daftar_kolom_asli if c not in (['No', 'Nama BPR Bersih', 'Bank Utama', 'TOTAL'])]
-                
-                kolom_total = ['TOTAL'] if 'TOTAL' in daftar_kolom_asli else []
-                
-                # GABUNGKAN SESUAI URUTAN REQUEST
-                urutan_ideal = kolom_no + kolom_bulan + [c for c in kolom_identitas if c in daftar_kolom_asli] + kolom_total
-                
-                saved_kol_sel = get_widget(nama_menu, "master_kolom", urutan_ideal)
-                valid_kol_sel = [c for c in saved_kol_sel if c in urutan_ideal]
-                
-                # Ubah judulnya biar atasan paham cara kerjanya
-                kolom_master_terpilih = st.multiselect(
-                    "👁️ 3. Tampilkan & Urutkan Kolom (Hapus lalu pilih ulang untuk mengubah posisi):", 
-                    options=urutan_ideal, 
-                    default=valid_kol_sel, 
-                    key="rek_master_kolom"
-                )
-                set_widget(nama_menu, "master_kolom", kolom_master_terpilih)
-
-                if not kolom_master_terpilih:
-                    st.warning("⚠️ Silakan pilih minimal satu Kolom untuk ditampilkan.")
-                else:
-                    # ==================================
-                    # TAMPILAN UI (PAKAI STREAMLIT TABS)
-                    # ==================================
-                    tabs = st.tabs([f"📊 {m}" for m in metrik_terpilih])
+                if dict_df_metrik:
+                    contoh_df = dict_df_metrik[metrik_terpilih[0]]
+                    daftar_kolom_asli = contoh_df.columns.tolist()
                     
-                    for idx, m_name in enumerate(metrik_terpilih):
-                        with tabs[idx]:
-                            df_tampil = dict_df_metrik[m_name][kolom_master_terpilih].copy()
-                            
-                            kolom_angka = [c for c in df_tampil.columns if c not in ('No', 'Bank Utama', 'Nama BPR Bersih')]
-                            for kolom in kolom_angka:
-                                df_tampil[kolom] = df_tampil[kolom].apply(format_ribuan)
+                    kolom_no = ['No'] if 'No' in daftar_kolom_asli else []
+                    kolom_identitas = ['Nama BPR Bersih', 'Bank Utama']
+                    kolom_bulan = [c for c in daftar_kolom_asli if c not in (['No', 'Nama BPR Bersih', 'Bank Utama', 'TOTAL'])]
+                    kolom_total = ['TOTAL'] if 'TOTAL' in daftar_kolom_asli else []
+                    
+                    urutan_ideal = kolom_no + kolom_bulan + [c for c in kolom_identitas if c in daftar_kolom_asli] + kolom_total
+                    
+                    saved_kol_sel = get_widget(nama_menu, "master_kolom", urutan_ideal)
+                    valid_kol_sel = [c for c in saved_kol_sel if c in urutan_ideal]
+                    
+                    kolom_master_terpilih = st.multiselect(
+                        "👁️ 3. Tampilkan & Urutkan Kolom:", 
+                        options=urutan_ideal, 
+                        default=valid_kol_sel, 
+                        key="rek_master_kolom"
+                    )
+                    set_widget(nama_menu, "master_kolom", kolom_master_terpilih)
 
-                            st.dataframe(df_tampil, use_container_width=True, hide_index=True)
-                            
-                    st.markdown("---")
-
-                    # ==================================
-                    # EXPORT EXCEL MULTI-SHEET MAGIC 🪄
-                    # ==================================
-                    try:
-                        buffer = io.BytesIO()
-                        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                            workbook = writer.book
-                            format_angka_excel = workbook.add_format({'num_format': '#,##0'})
-
-                            sheet_name_map = {
-                                "Jumlah VA (Create)": "Jumlah VA",
-                                "Jumlah Transaksi": "Jumlah Trx",
-                                "Nominal Transaksi": "Nominal"
-                            }
-
-                            for m_name in metrik_terpilih:
-                                df_excel = dict_df_metrik[m_name][kolom_master_terpilih]
-                                nama_sheet = sheet_name_map.get(m_name, m_name[:30])
-                                
-                                df_excel.to_excel(writer, sheet_name=nama_sheet, index=False)
-                                worksheet = writer.sheets[nama_sheet]
-                                
-                                for idx, kolom in enumerate(df_excel.columns):
-                                    if kolom in ('Bank Utama', 'Nama BPR Bersih'):
-                                        worksheet.set_column(idx, idx, 25)
-                                    elif kolom == 'No':
-                                        worksheet.set_column(idx, idx, 5)
-                                    else:
-                                        worksheet.set_column(idx, idx, 15, format_angka_excel)
-
-                        st.download_button(
-                            label="📥 Download Excel Multi-Sheet",
-                            data=buffer.getvalue(),
-                            file_name="Rekap_Data_Master_MultiSheet.xlsx",
-                            mime="application/vnd.ms-excel",
-                            type="primary",
-                        )
+                    if not kolom_master_terpilih:
+                        st.warning("⚠️ Silakan pilih minimal satu Kolom untuk ditampilkan.")
+                    else:
+                        tabs = st.tabs([f"📊 {m}" for m in metrik_terpilih])
                         
-                        # ==========================================
-                        # FITUR BARU: KIRIM DATA KE TAS RANSEL 🎒
-                        # ==========================================
-                        st.markdown("### 🚀 Opsi Lanjutan")
-                        if st.button("📊 Bawa Data Ini ke Menu Visualisasi", type="primary", use_container_width=True):
-                            st.session_state['data_rekap_visual'] = df_raw_filtered.copy()
-                            st.success("✅ Data berhasil diamankan! Silakan klik menu **'Analisis Persentase'** di navigasi sebelah kiri.")
+                        for idx, m_name in enumerate(metrik_terpilih):
+                            with tabs[idx]:
+                                df_tampil = dict_df_metrik[m_name][kolom_master_terpilih].copy()
+                                
+                                kolom_angka = [c for c in df_tampil.columns if c not in ('No', 'Bank Utama', 'Nama BPR Bersih')]
+                                for kolom in kolom_angka:
+                                    df_tampil[kolom] = df_tampil[kolom].apply(format_ribuan)
 
-                    except ModuleNotFoundError:
-                        st.error("🚨 Library 'xlsxwriter' belum terinstall!")
+                                st.dataframe(df_tampil, use_container_width=True, hide_index=True)
+                                
+                        st.markdown("---")
+
+                        # ==================================
+                # EXPORT EXCEL MULTI-SHEET MAGIC 🪄 (CUSTOM STACK PER BANK)
+                # ==================================
+                try:
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                        workbook = writer.book
+                        
+                        # Style Excel sesuai gambar referensi
+                        fmt_title_bank = workbook.add_format({'bold': True, 'font_size': 12, 'valign': 'vcenter'})
+                        fmt_header = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+                        fmt_data_teks = workbook.add_format({'border': 1, 'valign': 'vcenter'})
+                        fmt_data_angka = workbook.add_format({'border': 1, 'num_format': '#,##0', 'valign': 'vcenter', 'align': 'right'})
+
+                        sheet_name_map = {
+                            "Jumlah VA (Create)": "Jumlah VA",
+                            "Jumlah Transaksi": "Jumlah Trx",
+                            "Nominal Transaksi": "Nominal"
+                        }
+
+                        for m_name in metrik_terpilih:
+                            # Tarik data dari kamus memori
+                            df_excel = dict_df_metrik[m_name]
+                            nama_sheet = sheet_name_map.get(m_name, m_name[:30])
+                            
+                            worksheet = workbook.add_worksheet(nama_sheet)
+                            
+                            row_start = 0
+                            # Cari daftar bank unik buat dibikin grup susun
+                            list_bank = sorted(df_excel['Bank Utama'].astype(str).unique().tolist())
+                            
+                            for bank in list_bank:
+                                # Ambil data khusus untuk bank yang lagi di-loop
+                                df_bank = df_excel[df_excel['Bank Utama'] == bank]
+                                
+                                # 1. Tulis Judul Bank (Contoh: VA DANAMON)
+                                worksheet.write(row_start, 0, bank.upper(), fmt_title_bank)
+                                
+                                # 2. Gambar Header Tabel
+                                worksheet.merge_range(row_start + 1, 0, row_start + 2, 0, "No", fmt_header)
+                                worksheet.merge_range(row_start + 1, 1, row_start + 2, 1, "Nama BPR", fmt_header)
+                                worksheet.merge_range(row_start + 1, 2, row_start + 1, 13, "Bulan", fmt_header)
+                                worksheet.merge_range(row_start + 1, 14, row_start + 2, 14, "Total", fmt_header)
+                                
+                                # Header Baris ke-2 (Nama Bulan Januari-Desember)
+                                for i, bln in enumerate(URUTAN_BULAN):
+                                    worksheet.write(row_start + 2, 2 + i, bln, fmt_header)
+                                
+                                # 3. Masukin Angkanya
+                                data_row = row_start + 3
+                                for idx, (_, row_data) in enumerate(df_bank.iterrows()):
+                                    # Kolom No. direset dari 1 lagi per bank
+                                    worksheet.write(data_row + idx, 0, idx + 1, fmt_data_angka) 
+                                    worksheet.write(data_row + idx, 1, row_data['Nama BPR Bersih'], fmt_data_teks)
+                                    
+                                    # Looping masukin nilai per bulan
+                                    for i, bln in enumerate(URUTAN_BULAN):
+                                        val = row_data.get(bln, 0)
+                                        worksheet.write(data_row + idx, 2 + i, val, fmt_data_angka)
+                                        
+                                    # Kolom Total Ujung Kanan
+                                    tot = row_data.get('TOTAL', 0)
+                                    worksheet.write(data_row + idx, 14, tot, fmt_data_angka)
+                                
+                                # 4. Kasih jarak 2 baris kosong (spasi) sebelum cetak bank selanjutnya
+                                row_start = data_row + len(df_bank) + 2
+                                
+                            # Rapihin Lebar Kolom
+                            worksheet.set_column(0, 0, 5)   # No
+                            worksheet.set_column(1, 1, 35)  # Nama BPR
+                            worksheet.set_column(2, 13, 11) # Kolom Bulan
+                            worksheet.set_column(14, 14, 15)# Kolom Total
+
+                    st.download_button(
+                        label="📥 Download Excel Multi-Sheet",
+                        data=buffer.getvalue(),
+                        file_name="Rekap_Data_Master_MultiSheet.xlsx",
+                        mime="application/vnd.ms-excel",
+                        type="primary",
+                    )
+                    
+                    # ==========================================
+                    # FITUR BARU: KIRIM DATA KE TAS RANSEL 🎒
+                    # ==========================================
+                    st.markdown("### 🚀 Opsi Lanjutan")
+                    if st.button("📊 Bawa Data Ini ke Menu Visualisasi", type="primary", use_container_width=True):
+                        st.session_state['data_rekap_visual'] = df_raw_filtered.copy()
+                        st.success("✅ Data berhasil diamankan! Silakan klik menu **'Analisis Persentase'** di navigasi sebelah kiri.")
+
+                except ModuleNotFoundError:
+                    st.error("🚨 Library 'xlsxwriter' belum terinstall!")
         else:
             st.warning("Data masih kosong.")
 
 
 # ==============================================================================
-# JALUR 2 : LAPORAN MBANKING (ULTIMATE - UI COLOR & EXCEL FORMAT)
+# JALUR 2 : LAPORAN MBANKING (ULTIMATE - UI COLOR, EXCEL FORMAT, & FILTER TAHUN)
 # ==============================================================================
 if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
     nama_menu = 'mbanking'
@@ -989,10 +1033,9 @@ if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
             st.session_state.state_data[nama_menu]['file_cache'] = []
             st.rerun()
 
+    # SOLUSI FILE HILANG: Hapus blok 'else' supaya cache tidak ke-reset otomatis!
     if uploaded_files:
         st.session_state.state_data[nama_menu]['file_cache'] = [{'name': f.name, 'size': f.size, 'data': f.getvalue()} for f in uploaded_files]
-    else:
-        st.session_state.state_data[nama_menu]['file_cache'] = []
 
     active_files = st.session_state.state_data[nama_menu]['file_cache']
 
@@ -1000,7 +1043,6 @@ if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
         semua_data_terstandar = []
         st.markdown("### 🍳 Dapur Pemetaan Kolom (Column Mapping)")
         
-        # Palet warna untuk ngebedain tiap kotak file (Req #1)
         warna_palette = ['#FF4B4B', '#00b894', '#0984e3', '#fdcb6e', '#6c5ce7', '#e84393']
         idx_warna = 0
 
@@ -1039,11 +1081,9 @@ if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
                     sumber_id = f"{file_id}_{nama_sumber}"
                     if df_file is None or df_file.empty: continue
                     
-                    # REQ 1: INJEKSI WARNA BORDER/TOPI KHUSUS TIAP KOTAK 🎨
                     warna_pilihan = warna_palette[idx_warna % len(warna_palette)]
                     idx_warna += 1
                     
-                    # Garis warna tebal di atas kotak
                     st.markdown(f'<div style="height: 10px; background-color: {warna_pilihan}; border-radius: 5px 5px 0 0; margin-bottom: -1rem; z-index: 99; position: relative;"></div>', unsafe_allow_html=True)
 
                     with st.expander(f"📄 Pengaturan Data: {nama_sumber}", expanded=True):
@@ -1121,8 +1161,11 @@ if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
                         if map_tgl is not None:
                             tanggal_series = parse_tanggal_pintar(df_to_process[map_tgl])
                             df_std['Hari'] = tanggal_series.dt.day.fillna(0).astype(int)
+                            # --- FITUR BARU: EKSTRAKSI TAHUN ---
+                            df_std['Tahun'] = tanggal_series.dt.year.fillna(0).astype(int).astype(str).replace("0", "Unknown")
                         else:
                             df_std['Hari'] = 0
+                            df_std['Tahun'] = "Unknown"
 
                         if map_trx is not None: df_std['Jml Transaksi'] = df_to_process[map_trx].apply(aman_ke_angka)
                         else: df_std['Jml Transaksi'] = 1
@@ -1140,131 +1183,141 @@ if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
             df_master = pd.concat(semua_data_terstandar, ignore_index=True)
 
             st.markdown("---")
-            st.markdown("### 📊 Pivot Report Bulanan (Matrix 1-31)")
-
-            hari_kolom = [i for i in range(1, 32)]
-            pivot_trx = df_master.pivot_table(index=['Bank Utama', 'Nama Mitra'], columns='Hari', values='Jml Transaksi', aggfunc='sum', fill_value=0).reset_index()
-            pivot_nom = df_master.pivot_table(index=['Bank Utama', 'Nama Mitra'], columns='Hari', values='Nominal', aggfunc='sum', fill_value=0).reset_index()
-
-            for h in hari_kolom:
-                if h not in pivot_trx.columns: pivot_trx[h] = 0
-                if h not in pivot_nom.columns: pivot_nom[h] = 0
-
-            kolom_rapi = ['Bank Utama', 'Nama Mitra'] + hari_kolom
-            pivot_trx = pivot_trx[kolom_rapi]
-            pivot_nom = pivot_nom[kolom_rapi]
-
-            pivot_trx['TOTAL'] = pivot_trx[hari_kolom].sum(axis=1)
-            pivot_nom['TOTAL'] = pivot_nom[hari_kolom].sum(axis=1)
-
-            tab1, tab2 = st.tabs(["📉 Jumlah Transaksi", "💰 Nominal Transaksi"])
-
-            with tab1:
-                tampil_trx = pivot_trx.copy()
-                for col in hari_kolom + ['TOTAL']: tampil_trx[col] = tampil_trx[col].apply(format_ribuan)
-                st.dataframe(tampil_trx, use_container_width=True, hide_index=True)
-
-            with tab2:
-                tampil_nom = pivot_nom.copy()
-                for col in hari_kolom + ['TOTAL']: tampil_nom[col] = tampil_nom[col].apply(format_ribuan)
-                st.dataframe(tampil_nom, use_container_width=True, hide_index=True)
-
-            st.markdown("### 📥 Download Laporan")
             
-            # =======================================================
-            # REQ 6: CUSTOM EXPORT EXCEL SESUAI REFERENSI GAMBAR BOS 🪄
-            # =======================================================
-            try:
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    workbook = writer.book
-                    
-                    # 1. Bikin Style Excel yang ciamik
-                    fmt_title = workbook.add_format({'bold': True, 'font_size': 11})
-                    
-                    # Warna header kuning persis gambar (#FFC000)
-                    fmt_header = workbook.add_format({
-                        'bold': True, 'bg_color': '#FFC000', 'border': 1, 
-                        'align': 'center', 'valign': 'vcenter'
-                    })
-                    
-                    fmt_data_teks = workbook.add_format({'border': 1, 'valign': 'vcenter'})
-                    fmt_data_angka = workbook.add_format({'border': 1, 'num_format': '#,##0', 'align': 'center', 'valign': 'vcenter'})
-                    
-                    fmt_total_teks = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter'})
-                    fmt_total_angka = workbook.add_format({'bold': True, 'border': 1, 'num_format': '#,##0', 'align': 'center', 'valign': 'vcenter'})
+            # ==========================================
+            # FITUR BARU: FILTER TAHUN MBANKING
+            # ==========================================
+            st.markdown("### 🔍 Filter Tahun")
+            list_thn_mb = sorted(df_master['Tahun'].unique().tolist(), reverse=True)
+            pilih_semua_thn_mb = st.checkbox("☑️ Pilih Semua Tahun", value=True, key="mb_thn_all")
+            
+            df_thn_mb = pd.DataFrame({"Pilih": [pilih_semua_thn_mb] * len(list_thn_mb), "Tahun": list_thn_mb})
+            
+            st.markdown("""<style>.outline-thn-mb { border: 2px solid #fdcb6e; border-radius: 10px; padding: 10px; margin-bottom: 20px; }</style><div class="outline-thn-mb">""", unsafe_allow_html=True)
+            tabel_thn_mb = st.data_editor(df_thn_mb, hide_index=True, use_container_width=True, height=150, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            tahun_terpilih_mb = tabel_thn_mb[tabel_thn_mb["Pilih"] == True]["Tahun"].tolist()
+            
+            # Terapkan filter tahun sebelum masuk pivot
+            df_master = df_master[df_master['Tahun'].isin(tahun_terpilih_mb)]
+            
+            if df_master.empty:
+                st.warning("⚠️ Data kosong. Pastikan minimal ada 1 Tahun yang dicentang!")
+            else:
+                st.markdown("### 📊 Pivot Report Bulanan (Matrix 1-31)")
 
-                    # 2. Siapin data dinamis Tanggal/Bulan
-                    bln_ini = datetime.now().month
-                    thn_ini = datetime.now().year
-                    nama_bln_indo = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"]
-                    teks_bulan_laporan = f": {nama_bln_indo[bln_ini - 1]} {thn_ini}"
+                hari_kolom = [i for i in range(1, 32)]
+                pivot_trx = df_master.pivot_table(index=['Bank Utama', 'Nama Mitra'], columns='Hari', values='Jml Transaksi', aggfunc='sum', fill_value=0).reset_index()
+                pivot_nom = df_master.pivot_table(index=['Bank Utama', 'Nama Mitra'], columns='Hari', values='Nominal', aggfunc='sum', fill_value=0).reset_index()
 
-                    data_exports = [('Jml Trx', pivot_trx), ('Nominal Trx', pivot_nom)]
+                for h in hari_kolom:
+                    if h not in pivot_trx.columns: pivot_trx[h] = 0
+                    if h not in pivot_nom.columns: pivot_nom[h] = 0
 
-                    # 3. Tulis data ke masing-masing Sheet
-                    for sheet_name, df_export in data_exports:
-                        worksheet = workbook.add_worksheet(sheet_name)
+                kolom_rapi = ['Bank Utama', 'Nama Mitra'] + hari_kolom
+                pivot_trx = pivot_trx[kolom_rapi]
+                pivot_nom = pivot_nom[kolom_rapi]
+
+                pivot_trx['TOTAL'] = pivot_trx[hari_kolom].sum(axis=1)
+                pivot_nom['TOTAL'] = pivot_nom[hari_kolom].sum(axis=1)
+
+                tab1, tab2 = st.tabs(["📉 Jumlah Transaksi", "💰 Nominal Transaksi"])
+
+                with tab1:
+                    tampil_trx = pivot_trx.copy()
+                    for col in hari_kolom + ['TOTAL']: tampil_trx[col] = tampil_trx[col].apply(format_ribuan)
+                    st.dataframe(tampil_trx, use_container_width=True, hide_index=True)
+
+                with tab2:
+                    tampil_nom = pivot_nom.copy()
+                    for col in hari_kolom + ['TOTAL']: tampil_nom[col] = tampil_nom[col].apply(format_ribuan)
+                    st.dataframe(tampil_nom, use_container_width=True, hide_index=True)
+
+                st.markdown("### 📥 Download Laporan")
+                
+                try:
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                        workbook = writer.book
                         
-                        # Baris 4 (Index 3): BULAN
-                        worksheet.write(3, 0, "BULAN", fmt_title)
-                        worksheet.write(3, 1, teks_bulan_laporan, fmt_title)
+                        fmt_title = workbook.add_format({'bold': True, 'font_size': 11})
+                        fmt_header = workbook.add_format({
+                            'bold': True, 'bg_color': '#FFC000', 'border': 1, 
+                            'align': 'center', 'valign': 'vcenter'
+                        })
                         
-                        # Baris 5 & 6 (Index 4 & 5): HEADER MERGE
-                        worksheet.merge_range(4, 0, 5, 0, "NO.", fmt_header)
-                        worksheet.merge_range(4, 1, 5, 1, "NAMA APLIKASI", fmt_header)
-                        worksheet.merge_range(4, 2, 5, 2, "NAMA CLIENT", fmt_header)
+                        fmt_data_teks = workbook.add_format({'border': 1, 'valign': 'vcenter'})
+                        fmt_data_angka = workbook.add_format({'border': 1, 'num_format': '#,##0', 'align': 'center', 'valign': 'vcenter'})
                         
-                        # Merge Header TANGGAL (Di atas angka 1-31)
-                        jml_hari = len(hari_kolom)
-                        worksheet.merge_range(4, 3, 4, 3 + jml_hari - 1, "TANGGAL", fmt_header)
-                        worksheet.merge_range(4, 3 + jml_hari, 5, 3 + jml_hari, "TOTAL", fmt_header)
+                        fmt_total_teks = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+                        fmt_total_angka = workbook.add_format({'bold': True, 'border': 1, 'num_format': '#,##0', 'align': 'center', 'valign': 'vcenter'})
+
+                        bln_ini = datetime.now().month
+                        thn_ini = datetime.now().year
+                        nama_bln_indo = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"]
                         
-                        # Tulis angka 1-31 di Baris 6 (Index 5)
-                        for i, hari in enumerate(hari_kolom):
-                            worksheet.write(5, 3 + i, hari, fmt_header)
+                        # Modifikasi teks judul excel biar ngikutin tahun yang dipilih (jika hanya 1 tahun)
+                        teks_tahun_excel = str(thn_ini)
+                        if len(tahun_terpilih_mb) == 1 and tahun_terpilih_mb[0] != "Unknown":
+                            teks_tahun_excel = tahun_terpilih_mb[0]
                             
-                        # Baris 7 dst (Index 6): TULIS DATA
-                        row_start = 6
-                        for idx, row in df_export.iterrows():
-                            worksheet.write(row_start + idx, 0, idx + 1, fmt_data_angka) # Kolom No
-                            worksheet.write(row_start + idx, 1, row['Bank Utama'], fmt_data_teks)
-                            worksheet.write(row_start + idx, 2, row['Nama Mitra'], fmt_data_teks)
+                        teks_bulan_laporan = f": {nama_bln_indo[bln_ini - 1]} {teks_tahun_excel}"
+
+                        data_exports = [('Jml Trx', pivot_trx), ('Nominal Trx', pivot_nom)]
+
+                        for sheet_name, df_export in data_exports:
+                            worksheet = workbook.add_worksheet(sheet_name)
                             
-                            # Tulis harian 1-31
+                            worksheet.write(3, 0, "BULAN", fmt_title)
+                            worksheet.write(3, 1, teks_bulan_laporan, fmt_title)
+                            
+                            worksheet.merge_range(4, 0, 5, 0, "NO.", fmt_header)
+                            worksheet.merge_range(4, 1, 5, 1, "NAMA APLIKASI", fmt_header)
+                            worksheet.merge_range(4, 2, 5, 2, "NAMA CLIENT", fmt_header)
+                            
+                            jml_hari = len(hari_kolom)
+                            worksheet.merge_range(4, 3, 4, 3 + jml_hari - 1, "TANGGAL", fmt_header)
+                            worksheet.merge_range(4, 3 + jml_hari, 5, 3 + jml_hari, "TOTAL", fmt_header)
+                            
                             for i, hari in enumerate(hari_kolom):
-                                worksheet.write(row_start + idx, 3 + i, row[hari], fmt_data_angka)
+                                worksheet.write(5, 3 + i, hari, fmt_header)
                                 
-                            # Tulis Total baris
-                            worksheet.write(row_start + idx, 3 + jml_hari, row['TOTAL'], fmt_data_angka)
+                            row_start = 6
+                            for idx, row in df_export.iterrows():
+                                worksheet.write(row_start + idx, 0, idx + 1, fmt_data_angka) 
+                                worksheet.write(row_start + idx, 1, row['Bank Utama'], fmt_data_teks)
+                                worksheet.write(row_start + idx, 2, row['Nama Mitra'], fmt_data_teks)
                                 
-                        # Baris Paling Bawah: JUMLAH KESELURUHAN
-                        last_row = row_start + len(df_export)
-                        worksheet.merge_range(last_row, 0, last_row, 2, "JUMLAH", fmt_total_teks)
-                        
-                        for i, hari in enumerate(hari_kolom):
-                            total_hari_ini = df_export[hari].sum()
-                            worksheet.write(last_row, 3 + i, total_hari_ini, fmt_total_angka)
+                                for i, hari in enumerate(hari_kolom):
+                                    worksheet.write(row_start + idx, 3 + i, row[hari], fmt_data_angka)
+                                    
+                                worksheet.write(row_start + idx, 3 + jml_hari, row['TOTAL'], fmt_data_angka)
+                                    
+                            last_row = row_start + len(df_export)
+                            worksheet.merge_range(last_row, 0, last_row, 2, "JUMLAH", fmt_total_teks)
                             
-                        # Total dari kolom TOTAL
-                        grand_total = df_export['TOTAL'].sum()
-                        worksheet.write(last_row, 3 + jml_hari, grand_total, fmt_total_angka)
-                            
-                        # Lebarin kolom biar rapi otomatis
-                        worksheet.set_column(0, 0, 5)   # NO
-                        worksheet.set_column(1, 1, 18)  # APLIKASI
-                        worksheet.set_column(2, 2, 35)  # CLIENT
-                        worksheet.set_column(3, 3 + jml_hari, 6) # TANGGAL 1-31 & TOTAL
+                            for i, hari in enumerate(hari_kolom):
+                                total_hari_ini = df_export[hari].sum()
+                                worksheet.write(last_row, 3 + i, total_hari_ini, fmt_total_angka)
+                                
+                            grand_total = df_export['TOTAL'].sum()
+                            worksheet.write(last_row, 3 + jml_hari, grand_total, fmt_total_angka)
+                                
+                            worksheet.set_column(0, 0, 5)   
+                            worksheet.set_column(1, 1, 18)  
+                            worksheet.set_column(2, 2, 35)  
+                            worksheet.set_column(3, 3 + jml_hari, 6) 
 
-                st.download_button(
-                    label="📥 Download Master Excel (Sesuai Referensi)",
-                    data=buffer.getvalue(),
-                    file_name="Laporan_Pivot_Mbanking.xlsx",
-                    mime="application/vnd.ms-excel",
-                    type="primary",
-                )
-            except ModuleNotFoundError:
-                st.error("🚨 Library 'xlsxwriter' belum terinstall!")
+                    st.download_button(
+                        label="📥 Download Master Excel (Sesuai Referensi)",
+                        data=buffer.getvalue(),
+                        file_name="Laporan_Pivot_Mbanking.xlsx",
+                        mime="application/vnd.ms-excel",
+                        type="primary",
+                    )
+                except ModuleNotFoundError:
+                    st.error("🚨 Library 'xlsxwriter' belum terinstall!")
 
 
 # =====================================================================
@@ -1434,43 +1487,85 @@ if menu_terpilih == "Analisis Persentase":
             st.dataframe(df_final, use_container_width=True, hide_index=True)
 
 # ==============================================================================
-# JALUR 3 : LAPORAN QRIS (ULTIMATE)
+# JALUR 3 : LAPORAN QRIS (ULTIMATE + FILTER TAHUN + ANTI GHOIB CACHE)
 # ==============================================================================
 if menu_terpilih == "Laporan Qris":
+    nama_menu = 'qris'
+    
+    # 1. Bikin brankas memori khusus QRIS biar file nggak ghoib saat pindah menu
+    if 'state_data' not in st.session_state:
+        st.session_state['state_data'] = {}
+    if nama_menu not in st.session_state['state_data']:
+        st.session_state['state_data'][nama_menu] = {'file_cache': []}
+        
     st.title("📱 Modul Laporan QRIS")
     st.markdown("Upload Laporan Invoice QRIS. Sistem otomatis merakit Pivot Jumlah, Nominal, dan Fee MSO!")
     st.markdown("---")
 
-    uploaded_qris = st.file_uploader("Upload Laporan Invoice QRIS (Excel)", type=['xlsx', 'xls'], accept_multiple_files=True, key="upload_qris")
+    # 2. Desain Kolom Uploader & Tombol Bersihkan File
+    col_up1, col_up2 = st.columns([4, 1])
 
+    with col_up1:
+        if "file_uploader_key" not in st.session_state:
+            st.session_state["file_uploader_key"] = 0
+            
+        uploaded_qris = st.file_uploader(
+            "Upload Laporan Invoice QRIS (Excel)", 
+            type=['xlsx', 'xls'], 
+            accept_multiple_files=True, 
+            key=f"upload_qris_{st.session_state['file_uploader_key']}"
+        )
+
+    with col_up2:
+        st.write("") 
+        st.write("")
+        if st.button("🗑️ Bersihkan File", key="btn_clear_qris", use_container_width=True):
+            st.session_state["file_uploader_key"] += 1
+            st.session_state.state_data[nama_menu]['file_cache'] = []
+            st.rerun()
+
+    # 3. Kunci data ke Brankas (TANPA ELSE biar nggak ke-reset otomatis)
     if uploaded_qris:
+        st.session_state.state_data[nama_menu]['file_cache'] = [{'name': f.name, 'size': f.size, 'data': f.getvalue()} for f in uploaded_qris]
+
+    # 4. Baca file selalu dari Brankas, bukan dari uploader langsung
+    active_files = st.session_state.state_data[nama_menu].get('file_cache', [])
+
+    if active_files:
         semua_data_qris = []
         
         with st.spinner("Sedang mencuci dan merakit data QRIS..."):
-            for file in uploaded_qris:
+            for f_dict in active_files:
                 try:
-                    df = pd.read_excel(file)
+                    # File dibaca dari memori byte
+                    file_bytes = io.BytesIO(f_dict['data'])
+                    df = pd.read_excel(file_bytes)
                     
                     if 'Nama Lembaga' in df.columns and 'Tanggal Transaksi' in df.columns and 'Nominal Transaksi' in df.columns and 'Nominal Fee MSO' in df.columns:
                         
                         df_bersih = df[['Nama Lembaga', 'Tanggal Transaksi', 'Nominal Transaksi', 'Nominal Fee MSO']].copy()
                         df_bersih['Tanggal Transaksi'] = pd.to_datetime(df_bersih['Tanggal Transaksi'], errors='coerce')
+                        
+                        # --- EKSTRAK TAHUN DAN BULAN ---
+                        df_bersih['Tahun'] = df_bersih['Tanggal Transaksi'].dt.year
                         df_bersih['Bulan'] = df_bersih['Tanggal Transaksi'].dt.month.map(MAP_BULAN_ANGKA)
                         
                         semua_data_qris.append(df_bersih)
                     else:
-                        st.warning(f"⚠️ File {file.name} diabaikan karena format kolomnya beda (Tidak ada Nama Lembaga/Tanggal/Nominal/Nominal Fee MSO).")
+                        st.warning(f"⚠️ File {f_dict['name']} diabaikan karena format kolomnya beda.")
                 
                 except Exception as e:
-                    st.error(f"❌ Gagal membaca {file.name}: {e}")
+                    st.error(f"❌ Gagal membaca {f_dict['name']}: {e}")
 
         # Jika ada data yang sukses dicuci
         if semua_data_qris:
             df_master_qris = pd.concat(semua_data_qris, ignore_index=True)
-            df_master_qris = df_master_qris.dropna(subset=['Bulan'])
+            df_master_qris = df_master_qris.dropna(subset=['Bulan', 'Tahun'])
+            
+            df_master_qris['Tahun'] = df_master_qris['Tahun'].astype(int).astype(str)
             
             # ==========================================
-            # 1. PRATINJAU DATA MENTAH (PREVIEW)
+            # PRATINJAU DATA MENTAH (PREVIEW)
             # ==========================================
             st.markdown("### 👁️ Pratinjau Data Invoice")
             with st.expander("Buka untuk melihat data gabungan QRIS", expanded=False):
@@ -1491,60 +1586,54 @@ if menu_terpilih == "Laporan Qris":
                 st.markdown("</div>", unsafe_allow_html=True)
 
             # ==========================================
-            # 2. FILTER BPR & FILTER BULAN (CHECKLIST)
+            # FILTER BPR, BULAN, & TAHUN
             # ==========================================
-            st.markdown("### 🔍 Filter Data (BPR & Bulan)")
-            
-            col_f1, col_f2 = st.columns(2)
+            st.markdown("### 🔍 Filter Data")
+            col_f1, col_f2, col_f3 = st.columns(3)
 
             with col_f1:
                 st.markdown("**Pilih BPR:**")
                 list_bpr_unik = sorted(df_master_qris['Nama Lembaga'].dropna().unique().tolist())
-                
                 pilih_semua_bpr = st.checkbox("☑️ Pilih Semua BPR", value=True, key="qris_semua_bpr")
-                df_bpr_checkbox = pd.DataFrame({
-                    "Pilih": [pilih_semua_bpr] * len(list_bpr_unik),
-                    "Nama BPR": list_bpr_unik
-                })
+                df_bpr_checkbox = pd.DataFrame({"Pilih": [pilih_semua_bpr] * len(list_bpr_unik), "Nama BPR": list_bpr_unik})
                 
                 st.markdown("""<style>.outline-f1 { border: 2px solid #0984e3; border-radius: 10px; padding: 10px; }</style><div class="outline-f1">""", unsafe_allow_html=True)
-                tabel_bpr_diedit = st.data_editor(
-                    df_bpr_checkbox, hide_index=True, use_container_width=True, height=180,
-                    column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")}
-                )
+                tabel_bpr_diedit = st.data_editor(df_bpr_checkbox, hide_index=True, use_container_width=True, height=180, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
                 st.markdown("</div>", unsafe_allow_html=True)
                 bpr_terpilih = tabel_bpr_diedit[tabel_bpr_diedit["Pilih"] == True]["Nama BPR"].tolist()
 
             with col_f2:
                 st.markdown("**Pilih Bulan:**")
                 pilih_semua_bln = st.checkbox("☑️ Pilih Semua Bulan", value=True, key="qris_semua_bln")
-                df_bln_checkbox = pd.DataFrame({
-                    "Pilih": [pilih_semua_bln] * len(URUTAN_BULAN),
-                    "Bulan": URUTAN_BULAN
-                })
+                df_bln_checkbox = pd.DataFrame({"Pilih": [pilih_semua_bln] * len(URUTAN_BULAN), "Bulan": URUTAN_BULAN})
                 
                 st.markdown("""<style>.outline-f2 { border: 2px solid #e84393; border-radius: 10px; padding: 10px; }</style><div class="outline-f2">""", unsafe_allow_html=True)
-                tabel_bln_diedit = st.data_editor(
-                    df_bln_checkbox, hide_index=True, use_container_width=True, height=180,
-                    column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")}
-                )
+                tabel_bln_diedit = st.data_editor(df_bln_checkbox, hide_index=True, use_container_width=True, height=180, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
                 st.markdown("</div>", unsafe_allow_html=True)
                 bulan_terpilih = tabel_bln_diedit[tabel_bln_diedit["Pilih"] == True]["Bulan"].tolist()
+                
+            with col_f3:
+                st.markdown("**Pilih Tahun:**")
+                list_tahun_unik = sorted(df_master_qris['Tahun'].dropna().unique().tolist(), reverse=True)
+                pilih_semua_thn = st.checkbox("☑️ Pilih Semua Tahun", value=True, key="qris_semua_thn")
+                df_thn_checkbox = pd.DataFrame({"Pilih": [pilih_semua_thn] * len(list_tahun_unik), "Tahun": list_tahun_unik})
+                
+                st.markdown("""<style>.outline-f3 { border: 2px solid #fdcb6e; border-radius: 10px; padding: 10px; }</style><div class="outline-f3">""", unsafe_allow_html=True)
+                tabel_thn_diedit = st.data_editor(df_thn_checkbox, hide_index=True, use_container_width=True, height=180, column_config={"Pilih": st.column_config.CheckboxColumn("Pilih", width="small")})
+                st.markdown("</div>", unsafe_allow_html=True)
+                tahun_terpilih = tabel_thn_diedit[tabel_thn_diedit["Pilih"] == True]["Tahun"].tolist()
 
-            # Terapkan filter ke dataframe utama
             df_master_qris = df_master_qris[
                 (df_master_qris['Nama Lembaga'].isin(bpr_terpilih)) & 
-                (df_master_qris['Bulan'].isin(bulan_terpilih))
+                (df_master_qris['Bulan'].isin(bulan_terpilih)) &
+                (df_master_qris['Tahun'].isin(tahun_terpilih))
             ]
 
             if df_master_qris.empty:
-                st.warning("⚠️ Data kosong. Pastikan minimal ada 1 BPR dan 1 Bulan yang dicentang!")
+                st.warning("⚠️ Data kosong. Pastikan minimal ada 1 BPR, 1 Bulan, dan 1 Tahun yang dicentang!")
             else:
                 st.markdown("### 📊 Hasil Pivot Laporan QRIS")
 
-                # ==========================================
-                # 3. MESIN PIVOT DATA
-                # ==========================================
                 pivot_jml = df_master_qris.pivot_table(index='Nama Lembaga', columns='Bulan', values='Nominal Transaksi', aggfunc='count', fill_value=0).reset_index()
                 pivot_nom = df_master_qris.pivot_table(index='Nama Lembaga', columns='Bulan', values='Nominal Transaksi', aggfunc='sum', fill_value=0).reset_index()
                 pivot_fee = df_master_qris.pivot_table(index='Nama Lembaga', columns='Bulan', values='Nominal Fee MSO', aggfunc='sum', fill_value=0).reset_index()
@@ -1571,9 +1660,6 @@ if menu_terpilih == "Laporan Qris":
                 pivot_nom.insert(0, 'No.', range(1, len(pivot_nom) + 1))
                 pivot_fee.insert(0, 'No.', range(1, len(pivot_fee) + 1))
 
-                # ==========================================
-                # 4. TAMPILAN WEB (TAB)
-                # ==========================================
                 tab1, tab2, tab3 = st.tabs(["📉 Jumlah Transaksi", "💰 Nominal Transaksi", "💸 Fee MSO"])
                 
                 with tab1:
@@ -1591,9 +1677,6 @@ if menu_terpilih == "Laporan Qris":
                     for col in URUTAN_BULAN + ['Jumlah']: tampil_fee[col] = tampil_fee[col].apply(format_ribuan)
                     st.dataframe(tampil_fee, use_container_width=True, hide_index=True)
                     
-                # ==========================================
-                # 5. EXPORT EXCEL KHUSUS QRIS (3 SHEET)
-                # ==========================================
                 st.markdown("### 📥 Download Laporan")
                 try:
                     buffer = io.BytesIO()
