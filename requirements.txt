@@ -1,8 +1,7 @@
 streamlit
 pandas
+plotly
 pdfplumber
+xlsxwriter
 Pillow
-pytesseract
-XlsxWriter
 python-docx
-openpyxl
