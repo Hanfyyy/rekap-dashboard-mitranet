@@ -1318,6 +1318,16 @@ if menu_terpilih == "Laporan MBanking (Matrix 1-31)":
                     )
                 except ModuleNotFoundError:
                     st.error("🚨 Library 'xlsxwriter' belum terinstall!")
+                    
+                # ==========================================
+                # FITUR BARU: KIRIM DATA KE TAS RANSEL 🎒 (MBANKING)
+                # ==========================================
+                st.markdown("### 🚀 Opsi Lanjutan")
+                if st.button("📊 Bawa Data Ini ke Menu Visualisasi", type="primary", use_container_width=True, key="btn_vis_mbk"):
+                    # Menyimpan data master MBanking yang sudah difilter tahun
+                    st.session_state['data_rekap_visual'] = df_master.copy()
+                    st.session_state['sumber_data_visual'] = 'MBanking' # Penanda sumber data
+                    st.success("✅ Data MBanking berhasil diamankan! Silakan klik menu **'Analisis Persentase'** di navigasi sebelah kiri.")
 
 
 # =====================================================================
@@ -1729,3 +1739,13 @@ if menu_terpilih == "Laporan Qris":
                     )
                 except ModuleNotFoundError:
                     st.error("🚨 Library 'xlsxwriter' belum terinstall!")
+
+                # ==========================================
+                # FITUR BARU: KIRIM DATA KE TAS RANSEL 🎒 (QRIS)
+                # ==========================================
+                st.markdown("### 🚀 Opsi Lanjutan")
+                if st.button("📊 Bawa Data Ini ke Menu Visualisasi", type="primary", use_container_width=True, key="btn_vis_qris"):
+                    # Menyimpan data master QRIS yang sudah difilter BPR, Bulan, dan Tahun
+                    st.session_state['data_rekap_visual'] = df_master_qris.copy()
+                    st.session_state['sumber_data_visual'] = 'QRIS' # Penanda sumber data
+                    st.success("✅ Data QRIS berhasil diamankan! Silakan klik menu **'Analisis Persentase'** di navigasi sebelah kiri.")
